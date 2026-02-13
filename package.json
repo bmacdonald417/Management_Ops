@@ -4,6 +4,7 @@
   "description": "MacTech Enterprise Federal Governance & Risk Management Platform",
   "private": true,
   "scripts": {
+    "prepare": "cd backend && npm install && cd ../frontend && npm install",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
