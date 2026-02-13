@@ -8,6 +8,7 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:migrate:prod": "node dist/db/migrate.js",
     "db:seed": "tsx src/db/seeds/index.ts",
+    "db:seed:prod": "node dist/db/seeds/index.js",
     "start": "node dist/db/migrate.js && node dist/index.js"
   },
   "dependencies": {
