@@ -13,6 +13,7 @@
     "build:frontend": "cd frontend && npm run build",
     "db:migrate": "cd backend && npm run db:migrate",
     "db:seed": "cd backend && npm run db:seed",
+    "db:seed:prod": "cd backend && npm run db:seed:prod",
     "start": "cd backend && npm run start"
   },
   "devDependencies": {
