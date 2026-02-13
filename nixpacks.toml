@@ -1,0 +1,27 @@
+# Railway / Nixpacks configuration for MacTech Governance Platform
+# Single-service deployment: backend serves API + frontend static files
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = [
+  "npm install",
+  "cd backend && npm install",
+  "cd frontend && npm install"
+]
+
+[phases.build]
+cmds = [
+  "cd backend && npm run build",
+  "cp backend/src/db/schema.sql backend/dist/db/",
+  "cd frontend && npm run build",
+  "mkdir -p backend/public",
+  "cp -r frontend/dist/* backend/public/"
+]
+
+[start]
+cmd = "cd backend && node dist/index.js"
+
+[variables]
+NODE_ENV = "production"

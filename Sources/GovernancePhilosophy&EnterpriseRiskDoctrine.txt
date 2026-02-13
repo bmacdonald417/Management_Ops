@@ -1,0 +1,648 @@
+Level 3 – Confirmed CUI Compromise
+• Confirmed unauthorized access
+• Confirmed data exfiltration
+• System integrity compromised
+72-hour reporting obligation triggered if DFARS applies.
+________________
+
+
+Level 4 – Enterprise Breach
+• Widespread system compromise
+• Significant operational impact
+• Regulatory or contractual exposure
+Immediate executive escalation required.
+________________
+
+
+F.4 Incident Escalation Protocol
+Upon discovery of suspected incident:
+            1. Immediately notify Managing Member
+
+            2. Activate Incident Response Lead
+
+            3. Isolate affected systems
+
+            4. Preserve logs and forensic artifacts
+
+            5. Begin incident timeline documentation
+
+No employee may delay reporting.
+Reference:
+MAC-FRM-140 Incident Report Template
+________________
+
+
+F.5 72-Hour Reporting Requirement
+If DFARS 252.204-7012 applies:
+MacTech must report within 72 hours of discovery.
+Discovery occurs when:
+• An employee becomes aware of credible compromise
+• IT monitoring identifies breach
+• Subcontractor reports incident
+Reporting timeline begins at moment of awareness — not confirmation.
+________________
+
+
+F.6 Reporting Workflow
+The following actions shall occur within reporting window:
+• Identify affected systems
+• Identify data involved
+• Preserve logs
+• Document incident scope
+• Submit required report through DoD portal
+Submission must include:
+• Contractor CAGE
+• Contract number
+• Point of contact
+• Description of compromise
+• Affected systems
+Documentation retained.
+Reference:
+MAC-FRM-142 72-Hour Reporting Record
+________________
+
+
+F.7 Forensic Preservation Doctrine
+Upon detection:
+• Do not wipe affected systems
+• Preserve logs
+• Capture volatile memory if feasible
+• Restrict system access
+• Document chain of custody
+Improper system modification may compromise investigation.
+Reference:
+MAC-FRM-141 Forensic Preservation Checklist
+________________
+
+
+F.8 Subcontractor Incident Obligations
+Subcontractors handling CUI must:
+• Notify MacTech within 24 hours
+• Provide written incident summary
+• Preserve evidence
+• Cooperate with investigation
+Failure constitutes material breach.
+Reference:
+Appendix B – Cyber Flow-Down Clause
+________________
+
+
+F.9 Internal Communication Controls
+During investigation:
+• Limit internal distribution
+• Avoid speculation
+• Centralize communication
+• Preserve privilege if legal counsel involved
+Uncontrolled communication may create liability.
+________________
+
+
+F.10 Root Cause & Corrective Action
+After containment:
+• Conduct root cause analysis
+• Identify control gaps
+• Document remediation steps
+• Update security posture
+Corrective action must be documented.
+Reference:
+MAC-FRM-081 Corrective Action Log
+________________
+
+
+F.11 Incident Documentation Retention
+All incident documentation must be retained minimum six (6) years.
+Records include:
+• Initial report
+• Timeline
+• Forensic documentation
+• Reporting confirmation
+• Remediation evidence
+Stored in secure repository.
+________________
+
+
+F.12 Annual Incident Tabletop Exercise
+MacTech shall conduct:
+• Annual incident simulation
+• 72-hour reporting rehearsal
+• Subcontract notification test
+Results shall be documented.
+APPENDIX G
+CMMC CONTROL MAPPING & EVIDENCE INTEGRATION MATRIX
+(Enterprise Cyber Compliance Architecture)
+________________
+
+
+G.1 Purpose
+This Appendix establishes MacTech Solutions LLC’s structured mapping between:
+• Contractual cyber clauses
+• CMMC control domains
+• Internal policies and procedures
+• Operational controls
+• Evidence repository structure
+This mapping ensures:
+• Contract compliance traceability
+• Audit defensibility
+• Internal control verification
+• Subcontract cyber validation
+CMMC compliance is not a checklist — it is evidence-driven governance.
+________________
+
+
+G.2 Contract Clause to Control Mapping Doctrine
+For each contract including DFARS 252.204-7012 or DFARS 252.204-7021:
+MacTech shall:
+               1. Identify applicable CMMC level
+
+               2. Map contract clauses to CMMC domains
+
+               3. Verify boundary alignment
+
+               4. Confirm evidence existence
+
+               5. Document validation
+
+No contract shall be accepted beyond validated maturity level.
+Reference:
+MAC-FRM-150 CMMC Control Mapping Worksheet
+________________
+
+
+G.3 CMMC Domain Structure
+MacTech shall maintain mapping across the following CMMC control domains:
+• Access Control (AC)
+• Asset Management (AM)
+• Audit & Accountability (AU)
+• Awareness & Training (AT)
+• Configuration Management (CM)
+• Identification & Authentication (IA)
+• Incident Response (IR)
+• Maintenance (MA)
+• Media Protection (MP)
+• Personnel Security (PS)
+• Physical Protection (PE)
+• Risk Management (RM)
+• Security Assessment (CA)
+• Situational Awareness (SA)
+• System & Communications Protection (SC)
+• System & Information Integrity (SI)
+Each domain must be:
+• Assigned internal policy reference
+• Linked to operational control
+• Supported by evidence artifact
+________________
+
+
+G.4 Control Mapping Matrix Structure
+MacTech shall maintain a structured Control Mapping Matrix containing:
+• CMMC control identifier
+• Internal policy reference
+• Responsible control owner
+• Evidence location
+• Last review date
+• POA&M status (if applicable)
+Example structure:
+Control: AC.L2-3.1.1
+Policy: MAC-SOP-CYB-001 Access Control
+Owner: Cyber Lead
+Evidence: MFA configuration screenshot
+Review Date: Annual
+Status: Compliant
+This matrix must be version-controlled.
+________________
+
+
+G.5 Evidence Repository Doctrine
+Evidence must be:
+• Centralized
+• Access-restricted
+• Version-controlled
+• Organized by control family
+• Retained for audit
+Evidence may include:
+• Policy documents
+• Configuration exports
+• System screenshots
+• Log samples
+• Access review reports
+• Incident records
+• Training records
+Evidence must be retrievable within 24 hours if requested.
+________________
+
+
+G.6 Plan of Action & Milestones (POA&M)
+If a control gap is identified:
+MacTech shall:
+• Document the deficiency
+• Assign responsible owner
+• Define remediation timeline
+• Track progress
+• Document completion
+POA&M items shall not remain open indefinitely.
+Reference:
+MAC-FRM-151 POA&M Tracker
+________________
+
+
+G.7 Control Ownership Assignment
+Each CMMC domain shall have a designated owner responsible for:
+• Annual review
+• Control validation
+• Evidence update
+• Gap identification
+Control ownership must be documented.
+________________
+
+
+G.8 Subcontractor Cyber Validation
+For subcontractors handling CUI:
+MacTech shall:
+• Obtain certification confirmation
+• Validate CMMC level
+• Retain documentation
+• Require incident notification clause
+Failure of subcontractor cyber compliance may expose Prime.
+Reference:
+MAC-FRM-132 Subcontractor CUI Affirmation
+________________
+
+
+G.9 Cyber Governance Review Cadence
+Cyber governance review shall occur:
+• Annually
+• Upon major system change
+• Upon CMMC requirement escalation
+• After any incident
+Review results must be documented.
+________________
+
+
+G.10 Cyber Maturity Escalation Policy
+If contract requires CMMC level beyond validated maturity:
+Bid shall not proceed without:
+• Formal risk acknowledgment
+• Budget allocation
+• Remediation plan
+• Timeline validation
+MacTech shall not assume compliance beyond documented capability.
+________________
+
+
+G.11 Audit Preparation Readiness
+To prepare for CMMC or DoD audit:
+MacTech shall:
+• Validate all control mappings
+• Confirm evidence availability
+• Conduct mock assessment
+• Resolve open POA&M items
+Audit readiness shall be tested annually.
+APPENDIX H
+COST POOL DEFINITIONS & INDIRECT RATE METHODOLOGY
+(DCAA-Aligned Lite – Scalable Enterprise Structure)
+________________
+
+
+H.1 Purpose
+This Appendix establishes MacTech Solutions LLC’s cost accounting structure aligned with:
+• FAR Part 31 – Cost Principles
+• Cost allocability doctrine
+• Indirect rate methodology
+• Timekeeping discipline
+• Audit traceability
+This structure is designed to:
+• Support fixed-price and T&M contracts
+• Scale into cost-reimbursable readiness
+• Withstand DCAA sampling review
+• Prevent disallowed cost exposure
+Financial integrity is non-negotiable.
+________________
+
+
+H.2 Accounting System Requirements
+MacTech’s accounting system must support:
+• Segregation of direct and indirect costs
+• Unique job number tracking
+• Timekeeping by project
+• Indirect rate calculation capability
+• Unallowable cost segregation
+• Audit trail preservation
+The system must allow:
+• Transaction-level traceability
+• Supporting documentation attachment
+• Retention of historical rate calculations
+________________
+
+
+H.3 Direct Cost Structure
+Direct costs must be identifiable to a specific contract.
+Direct cost categories include:
+• Direct Labor (by employee, by job number)
+• Direct Materials
+• Direct Travel
+• Direct Subcontract Costs
+• Other direct contract expenses
+Direct costs must:
+• Be allocable
+• Be allowable
+• Be reasonable
+• Be documented
+Improper allocation may trigger disallowance.
+________________
+
+
+H.4 Indirect Cost Pools
+MacTech maintains three primary indirect pools:
+H.4.1 Fringe Pool
+Includes employee benefit-related expenses:
+• Payroll taxes
+• Health insurance
+• Retirement contributions
+• PTO burden
+• Workers’ compensation insurance
+Fringe Base: Direct Labor
+Fringe rate applied to direct labor only.
+________________
+
+
+H.4.2 Overhead Pool
+Includes operational support expenses:
+• Indirect labor
+• IT infrastructure
+• Software subscriptions
+• Office lease
+• Utilities
+• Depreciation
+• Equipment maintenance
+Overhead Base: Direct Labor
+________________
+
+
+H.4.3 General & Administrative (G&A) Pool
+Includes corporate-level expenses:
+• Executive salaries
+• Legal services
+• Accounting services
+• Corporate insurance
+• Business development
+• Marketing (allowable portion)
+G&A Base: Total Cost Input (Direct + Indirect)
+________________
+
+
+H.5 Unallowable Cost Segregation
+Unallowable costs must be segregated into separate general ledger accounts.
+Common unallowables include:
+• Alcohol
+• Entertainment
+• Lobbying
+• Fines and penalties
+• Bad debts
+• Contributions
+Unallowable costs shall not be included in indirect pools.
+Quarterly review required.
+Reference:
+MAC-FRM-170 Allowability Review Checklist
+________________
+
+
+H.6 Indirect Rate Calculation Methodology
+MacTech shall calculate rates as follows:
+Fringe Rate = Fringe Pool ÷ Direct Labor
+Overhead Rate = Overhead Pool ÷ Direct Labor
+G&A Rate = G&A Pool ÷ Total Cost Input
+Rates shall be:
+• Calculated quarterly
+• Reviewed annually
+• Adjusted if material variance occurs
+Historical calculations must be retained.
+Reference:
+MAC-FRM-160 Indirect Rate Worksheet
+________________
+
+
+H.7 Timekeeping Controls
+Timekeeping must be:
+• Recorded daily
+• Approved by supervisor
+• Linked to job number
+• Electronically timestamped
+Prohibited:
+• Pre-filling timesheets
+• Estimating hours retroactively without documentation
+• Charging indirect time to direct accounts
+Timekeeping integrity supports audit defensibility.
+________________
+
+
+H.8 Job Cost Monitoring
+For each contract, MacTech shall monitor:
+• Funded ceiling
+• Estimated cost
+• Labor burn rate
+• Indirect burden applied
+• Variance from proposal
+Funding notifications required when:
+• 75% of funded amount reached
+Reference:
+MAC-FRM-161 Job Cost Monitoring Log
+________________
+
+
+H.9 Billing Controls
+Invoices must:
+• Reflect actual labor hours
+• Apply approved indirect rates
+• Exclude unallowable costs
+• Be reconciled to job cost reports
+Billing review required prior to submission.
+________________
+
+
+H.10 Cost-Reimbursable Expansion Protocol
+If MacTech pursues cost-reimbursable contracts:
+Additional controls required:
+• Provisional rate establishment
+• Incurred Cost Submission readiness
+• Enhanced documentation discipline
+• Indirect rate reconciliation capability
+Cost-reimbursable work requires Sole Managing Member approval.
+________________
+
+
+H.11 Financial Documentation Retention
+Retain minimum six (6) years:
+• Payroll records
+• General ledger
+• Invoices
+• Indirect rate worksheets
+• Job cost reports
+• Expense documentation
+Records must be audit retrievable.
+________________
+
+
+Appendix H complete.
+APPENDIX I
+FAR PART 31 ALLOWABILITY SUMMARY & ENTERPRISE COST COMPLIANCE DOCTRINE
+________________
+
+
+I.1 Purpose
+This Appendix establishes MacTech Solutions LLC’s internal allowability governance doctrine in alignment with:
+• FAR Part 31 – Contract Cost Principles and Procedures
+• Allocability doctrine
+• Reasonableness standard
+• Consistency requirement
+This Appendix provides structured guidance for:
+• Expense classification
+• Indirect pool integrity
+• Unallowable segregation
+• Audit defensibility
+Failure to properly classify costs may result in:
+• Disallowed costs
+• Indirect rate adjustments
+• False Claims exposure
+• Contract repayment
+________________
+
+
+I.2 The Three Core Allowability Tests
+All costs charged to federal contracts must satisfy:
+1. Allowable
+Permitted under FAR Part 31.
+2. Allocable
+Assignable to a specific contract or cost objective.
+3. Reasonable
+Reflects sound business judgment.
+Failure to meet any of the three renders the cost unallowable.
+________________
+
+
+I.3 Generally Allowable Costs
+(If Reasonable and Allocable)
+• Direct labor
+• Materials and supplies
+• Travel (at reasonable rates)
+• Rent and utilities
+• Professional services (legal/accounting)
+• Insurance
+• Depreciation
+• Software subscriptions supporting operations
+• Training related to contract performance
+Allowability may depend on contract type.
+________________
+
+
+I.4 Expressly Unallowable Costs
+The following are unallowable under FAR Part 31:
+• Alcohol
+• Entertainment
+• Lobbying
+• Political contributions
+• Fines and penalties
+• Bad debts
+• Donations and charitable contributions
+• Losses on other contracts
+These must be coded separately.
+Reference:
+Appendix H – Unallowable Segregation Controls
+________________
+
+
+I.5 Conditionally Allowable / Gray Area Costs
+Certain costs require careful review:
+Executive Compensation
+Must be reasonable and not excessive.
+Marketing & Business Development
+Allowable if not contingent lobbying.
+Travel Upgrades
+Luxury travel is unallowable.
+Legal Settlements
+May be partially unallowable.
+Advertising
+Allowable only if for recruitment or general business promotion (not lobbying).
+Gray area costs require documented review.
+Reference:
+MAC-FRM-170 Allowability Review Checklist
+________________
+
+
+I.6 Allocability Doctrine
+A cost is allocable if it:
+• Is incurred specifically for the contract
+• Benefits both contract and other work and can be distributed proportionally
+• Is necessary to overall business operation
+Improper allocation is a common audit finding.
+________________
+
+
+I.7 Consistency Requirement
+Costs must be treated consistently.
+Example:
+If treated as indirect in one instance, cannot later be charged direct without justification.
+Consistency supports indirect rate defensibility.
+________________
+
+
+I.8 Unallowable Cost Segregation Requirements
+Unallowable costs must:
+• Be coded to separate GL accounts
+• Not be included in indirect pools
+• Not be billed to contract
+• Be excluded from rate calculation
+Quarterly review required.
+________________
+
+
+I.9 Quarterly Allowability Review
+MacTech shall conduct quarterly review including:
+• Expense sampling
+• Unallowable account validation
+• Indirect pool verification
+• Documentation spot-check
+Findings documented and retained.
+________________
+
+
+I.10 False Claims Risk Awareness
+Charging unallowable costs knowingly may trigger:
+• False Claims Act exposure
+• Civil penalties
+• Treble damages
+• Criminal liability
+Internal compliance reduces risk.
+________________
+
+
+I.11 Documentation Retention
+Retain:
+• Receipts
+• Invoices
+• Justification memos
+• Expense approvals
+Retention minimum six (6) years.
+APPENDIX J
+ENTERPRISE GOVERNANCE KPI DASHBOARD & OVERSIGHT REPORTING FRAMEWORK
+________________
+
+
+J.1 Purpose
+This Appendix establishes MacTech Solutions LLC’s Enterprise Governance Dashboard structure.
+Governance must be measurable.
+This framework provides:
+• Risk visibility
+• Performance metrics
+• Compliance tracking
+• Early-warning indicators
+• Executive-level oversight
+KPIs shall be reviewed:
+• Quarterly (light review)
+• Annually (full governance audit)
+• Event-driven (as required)
+________________
+
+
+J.2 Governance KPI Categories
+KPIs are structured under five primary governance pillars:
+(Content truncated due to size limit. Use line ranges to read remaining content)
