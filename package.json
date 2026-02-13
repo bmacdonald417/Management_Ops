@@ -8,7 +8,7 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm run dev",
-    "build": "npm run build:backend && npm run build:frontend && node scripts/copy-frontend.js",
+    "build": "npm run build:backend && node scripts/copy-schema.js && npm run build:frontend && node scripts/copy-frontend.js",
     "build:backend": "cd backend && npm run build",
     "build:frontend": "cd frontend && npm run build",
     "db:migrate": "cd backend && npm run db:migrate",
