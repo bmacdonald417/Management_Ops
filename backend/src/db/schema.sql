@@ -23,9 +23,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id);
-CREATE INDEX idx_audit_created ON audit_logs(created_at);
-CREATE INDEX idx_audit_user ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
 
 -- Contracts
 CREATE TABLE IF NOT EXISTS contracts (
@@ -46,9 +46,9 @@ CREATE TABLE IF NOT EXISTS contracts (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_contracts_status ON contracts(status);
-CREATE INDEX idx_contracts_agency ON contracts(agency);
-CREATE INDEX idx_contracts_deleted ON contracts(deleted_at) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
+CREATE INDEX IF NOT EXISTS idx_contracts_agency ON contracts(agency);
+CREATE INDEX IF NOT EXISTS idx_contracts_deleted ON contracts(deleted_at) WHERE deleted_at IS NULL;
 
 -- Risk Profiles
 CREATE TABLE IF NOT EXISTS risk_profiles (
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS risk_profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_risk_profiles_contract ON risk_profiles(contract_id);
+CREATE INDEX IF NOT EXISTS idx_risk_profiles_contract ON risk_profiles(contract_id);
 
 -- Compliance Clauses (FAR/DFARS)
 CREATE TABLE IF NOT EXISTS compliance_clauses (
@@ -86,9 +86,9 @@ CREATE TABLE IF NOT EXISTS compliance_clauses (
   UNIQUE(clause_number, regulation)
 );
 
-CREATE INDEX idx_clauses_regulation ON compliance_clauses(regulation);
-CREATE INDEX idx_clauses_risk_level ON compliance_clauses(risk_level);
-CREATE INDEX idx_clauses_number ON compliance_clauses(clause_number);
+CREATE INDEX IF NOT EXISTS idx_clauses_regulation ON compliance_clauses(regulation);
+CREATE INDEX IF NOT EXISTS idx_clauses_risk_level ON compliance_clauses(risk_level);
+CREATE INDEX IF NOT EXISTS idx_clauses_number ON compliance_clauses(clause_number);
 
 -- Contract-Clause Links
 CREATE TABLE IF NOT EXISTS contract_clauses (
@@ -105,8 +105,8 @@ CREATE TABLE IF NOT EXISTS contract_clauses (
   UNIQUE(contract_id, clause_id)
 );
 
-CREATE INDEX idx_contract_clauses_contract ON contract_clauses(contract_id);
-CREATE INDEX idx_contract_clauses_status ON contract_clauses(compliance_status);
+CREATE INDEX IF NOT EXISTS idx_contract_clauses_contract ON contract_clauses(contract_id);
+CREATE INDEX IF NOT EXISTS idx_contract_clauses_status ON contract_clauses(compliance_status);
 
 -- CMMC Controls (NIST 800-171)
 CREATE TABLE IF NOT EXISTS cmmc_controls (
@@ -124,9 +124,9 @@ CREATE TABLE IF NOT EXISTS cmmc_controls (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_cmmc_domain ON cmmc_controls(domain);
-CREATE INDEX idx_cmmc_level ON cmmc_controls(level);
-CREATE INDEX idx_cmmc_identifier ON cmmc_controls(control_identifier);
+CREATE INDEX IF NOT EXISTS idx_cmmc_domain ON cmmc_controls(domain);
+CREATE INDEX IF NOT EXISTS idx_cmmc_level ON cmmc_controls(level);
+CREATE INDEX IF NOT EXISTS idx_cmmc_identifier ON cmmc_controls(control_identifier);
 
 -- CMMC Assessments (per contract)
 CREATE TABLE IF NOT EXISTS cmmc_assessments (
@@ -145,8 +145,8 @@ CREATE TABLE IF NOT EXISTS cmmc_assessments (
   UNIQUE(contract_id, control_id)
 );
 
-CREATE INDEX idx_cmmc_assessments_contract ON cmmc_assessments(contract_id);
-CREATE INDEX idx_cmmc_assessments_control ON cmmc_assessments(control_id);
+CREATE INDEX IF NOT EXISTS idx_cmmc_assessments_contract ON cmmc_assessments(contract_id);
+CREATE INDEX IF NOT EXISTS idx_cmmc_assessments_control ON cmmc_assessments(control_id);
 
 -- Indirect Rates
 CREATE TABLE IF NOT EXISTS indirect_rates (
@@ -159,8 +159,8 @@ CREATE TABLE IF NOT EXISTS indirect_rates (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_indirect_rates_type ON indirect_rates(rate_type);
-CREATE INDEX idx_indirect_rates_quarter ON indirect_rates(quarter);
+CREATE INDEX IF NOT EXISTS idx_indirect_rates_type ON indirect_rates(rate_type);
+CREATE INDEX IF NOT EXISTS idx_indirect_rates_quarter ON indirect_rates(quarter);
 
 -- Job Cost Logs
 CREATE TABLE IF NOT EXISTS job_cost_logs (
@@ -179,8 +179,8 @@ CREATE TABLE IF NOT EXISTS job_cost_logs (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_job_costs_contract ON job_cost_logs(contract_id);
-CREATE INDEX idx_job_costs_date ON job_cost_logs(log_date);
+CREATE INDEX IF NOT EXISTS idx_job_costs_contract ON job_cost_logs(contract_id);
+CREATE INDEX IF NOT EXISTS idx_job_costs_date ON job_cost_logs(log_date);
 
 -- Documents metadata
 CREATE TABLE IF NOT EXISTS documents (
@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS documents (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_documents_entity ON documents(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_documents_entity ON documents(entity_type, entity_id);
 
 -- Notifications
 CREATE TABLE IF NOT EXISTS notifications (
@@ -208,8 +208,8 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_notifications_user ON notifications(user_id);
-CREATE INDEX idx_notifications_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read);
 
 -- Risk Escalations
 CREATE TABLE IF NOT EXISTS risk_escalations (
@@ -221,7 +221,7 @@ CREATE TABLE IF NOT EXISTS risk_escalations (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_risk_escalations_profile ON risk_escalations(risk_profile_id);
+CREATE INDEX IF NOT EXISTS idx_risk_escalations_profile ON risk_escalations(risk_profile_id);
 
 -- Incident Reports (Cyber)
 CREATE TABLE IF NOT EXISTS incident_reports (
@@ -236,8 +236,8 @@ CREATE TABLE IF NOT EXISTS incident_reports (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_incidents_status ON incident_reports(status);
-CREATE INDEX idx_incidents_contract ON incident_reports(contract_id);
+CREATE INDEX IF NOT EXISTS idx_incidents_status ON incident_reports(status);
+CREATE INDEX IF NOT EXISTS idx_incidents_contract ON incident_reports(contract_id);
 
 -- Ensure default admin user exists (for dev-token login)
 INSERT INTO users (auth_id, email, name, role)
