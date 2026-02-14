@@ -15,7 +15,19 @@ ALTER TABLE clause_library_items ADD COLUMN IF NOT EXISTS updated_by UUID REFERE
 UPDATE clause_library_items SET type = 'DFARS' WHERE clause_number LIKE '252.%' AND (type IS NULL OR type = 'OTHER');
 UPDATE clause_library_items SET type = 'FAR' WHERE (clause_number LIKE '52.%' OR clause_number LIKE 'FAR 52.%') AND (type IS NULL OR type = 'OTHER');
 
--- Indexes for filtering
-CREATE INDEX IF NOT EXISTS idx_clause_library_type ON clause_library_items(type);
-CREATE INDEX IF NOT EXISTS idx_clause_library_flow_down ON clause_library_items(flow_down);
-CREATE INDEX IF NOT EXISTS idx_clause_library_suggested_risk ON clause_library_items(suggested_risk_level);
+-- Indexes for filtering (only if column exists - production-safe)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'clause_library_items' AND column_name = 'type') THEN
+    CREATE INDEX IF NOT EXISTS idx_clause_library_type ON clause_library_items(type);
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'clause_library_items' AND column_name = 'flow_down') THEN
+    CREATE INDEX IF NOT EXISTS idx_clause_library_flow_down ON clause_library_items(flow_down);
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'clause_library_items' AND column_name = 'suggested_risk_level') THEN
+    CREATE INDEX IF NOT EXISTS idx_clause_library_suggested_risk ON clause_library_items(suggested_risk_level);
+  END IF;
+END $$;

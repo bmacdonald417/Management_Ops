@@ -273,9 +273,7 @@ CREATE TABLE IF NOT EXISTS clause_library_items (
 );
 CREATE INDEX IF NOT EXISTS idx_clause_library_number ON clause_library_items(clause_number);
 CREATE INDEX IF NOT EXISTS idx_clause_library_category ON clause_library_items(category);
-CREATE INDEX IF NOT EXISTS idx_clause_library_type ON clause_library_items(type);
-CREATE INDEX IF NOT EXISTS idx_clause_library_flow_down ON clause_library_items(flow_down);
-CREATE INDEX IF NOT EXISTS idx_clause_library_suggested_risk ON clause_library_items(suggested_risk_level);
+-- idx_clause_library_type, flow_down, suggested_risk created in migration 001 (after ADD COLUMN)
 
 -- Solicitations
 CREATE TABLE IF NOT EXISTS solicitations (
