@@ -239,6 +239,137 @@ CREATE TABLE IF NOT EXISTS incident_reports (
 CREATE INDEX IF NOT EXISTS idx_incidents_status ON incident_reports(status);
 CREATE INDEX IF NOT EXISTS idx_incidents_contract ON incident_reports(contract_id);
 
+-- ========== Governance Engine Module ==========
+
+-- Risk Model Config (database-backed, configurable weights/thresholds)
+CREATE TABLE IF NOT EXISTS risk_model_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  config_key VARCHAR(100) NOT NULL UNIQUE,
+  config_value JSONB NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Clause Library (internal reference, Quality/SysAdmin editable)
+CREATE TABLE IF NOT EXISTS clause_library_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clause_number VARCHAR(50) NOT NULL,
+  title TEXT NOT NULL,
+  category VARCHAR(100),
+  default_financial INTEGER DEFAULT 2,
+  default_cyber INTEGER DEFAULT 2,
+  default_liability INTEGER DEFAULT 2,
+  default_regulatory INTEGER DEFAULT 2,
+  default_performance INTEGER DEFAULT 2,
+  notes TEXT,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(clause_number)
+);
+CREATE INDEX IF NOT EXISTS idx_clause_library_number ON clause_library_items(clause_number);
+CREATE INDEX IF NOT EXISTS idx_clause_library_category ON clause_library_items(category);
+
+-- Solicitations
+CREATE TABLE IF NOT EXISTS solicitations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitation_number VARCHAR(100) NOT NULL UNIQUE,
+  title VARCHAR(500) NOT NULL,
+  agency VARCHAR(255) NOT NULL,
+  naics_code VARCHAR(20),
+  contract_type VARCHAR(50) NOT NULL,
+  est_value DECIMAL(18,2),
+  cui_involved BOOLEAN DEFAULT false,
+  cmmc_level VARCHAR(20) DEFAULT 'None',
+  set_aside_type VARCHAR(100),
+  due_date DATE,
+  owner_id UUID REFERENCES users(id),
+  current_version INTEGER DEFAULT 1,
+  status VARCHAR(50) NOT NULL DEFAULT 'DRAFT',
+  overall_risk_score DECIMAL(10,2),
+  overall_risk_level INTEGER,
+  escalation_required BOOLEAN DEFAULT false,
+  executive_approval_required BOOLEAN DEFAULT false,
+  quality_approval_required BOOLEAN DEFAULT false,
+  financial_review_required BOOLEAN DEFAULT false,
+  cyber_review_required BOOLEAN DEFAULT false,
+  no_clauses_attestation BOOLEAN DEFAULT false,
+  no_clauses_attested_by UUID REFERENCES users(id),
+  no_clauses_attested_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  finalized_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_solicitations_status ON solicitations(status);
+CREATE INDEX IF NOT EXISTS idx_solicitations_owner ON solicitations(owner_id);
+CREATE INDEX IF NOT EXISTS idx_solicitations_agency ON solicitations(agency);
+
+-- Solicitation Versions (for revisions)
+CREATE TABLE IF NOT EXISTS solicitation_versions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitation_id UUID NOT NULL REFERENCES solicitations(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(solicitation_id, version)
+);
+CREATE INDEX IF NOT EXISTS idx_sol_versions_sol ON solicitation_versions(solicitation_id);
+
+-- Clause Review Entries
+CREATE TABLE IF NOT EXISTS clause_review_entries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitation_id UUID NOT NULL REFERENCES solicitations(id) ON DELETE CASCADE,
+  version_id UUID NOT NULL REFERENCES solicitation_versions(id) ON DELETE CASCADE,
+  clause_number VARCHAR(50) NOT NULL,
+  clause_title TEXT,
+  category VARCHAR(100),
+  financial_dim INTEGER DEFAULT 2,
+  cyber_dim INTEGER DEFAULT 2,
+  liability_dim INTEGER DEFAULT 2,
+  regulatory_dim INTEGER DEFAULT 2,
+  performance_dim INTEGER DEFAULT 2,
+  total_score DECIMAL(10,2),
+  risk_level INTEGER,
+  escalation_trigger BOOLEAN DEFAULT false,
+  escalation_reason TEXT,
+  not_applicable BOOLEAN DEFAULT false,
+  not_applicable_reason TEXT,
+  not_applicable_approved_by UUID REFERENCES users(id),
+  notes TEXT,
+  review_evidence TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_clause_entries_sol ON clause_review_entries(solicitation_id);
+CREATE INDEX IF NOT EXISTS idx_clause_entries_version ON clause_review_entries(version_id);
+
+-- Approvals
+CREATE TABLE IF NOT EXISTS approvals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  solicitation_id UUID NOT NULL REFERENCES solicitations(id) ON DELETE CASCADE,
+  approval_type VARCHAR(50) NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  approver_id UUID REFERENCES users(id),
+  approved_at TIMESTAMPTZ,
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_approvals_sol ON approvals(solicitation_id);
+
+-- Governance Audit Events
+CREATE TABLE IF NOT EXISTS governance_audit_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type VARCHAR(100) NOT NULL,
+  entity_id UUID NOT NULL,
+  action VARCHAR(50) NOT NULL,
+  field_name VARCHAR(100),
+  old_value TEXT,
+  new_value TEXT,
+  actor_id UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_gov_audit_entity ON governance_audit_events(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_gov_audit_created ON governance_audit_events(created_at);
+
 -- Ensure default admin user exists (for dev-token login)
 INSERT INTO users (auth_id, email, name, role)
 VALUES ('dev-auth-1', 'admin@mactech.local', 'Dev Admin', 'Level 1')

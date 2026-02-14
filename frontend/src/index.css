@@ -5,3 +5,15 @@
 body {
   font-family: 'DM Sans', system-ui, sans-serif;
 }
+
+@media print {
+  .print\:hidden {
+    display: none !important;
+  }
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+  .print\:p-0 {
+    padding: 0 !important;
+  }
+}

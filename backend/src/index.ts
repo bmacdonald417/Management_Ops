@@ -12,6 +12,7 @@ import cyberRouter from './routes/cyber.js';
 import usersRouter from './routes/users.js';
 import dashboardRouter from './routes/dashboard.js';
 import authRouter from './routes/auth.js';
+import governanceRouter from './routes/governance.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -26,6 +27,7 @@ app.use('/api/risk', riskRouter);
 app.use('/api/cyber', cyberRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/governance', governanceRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'MacTech Governance Platform' });
