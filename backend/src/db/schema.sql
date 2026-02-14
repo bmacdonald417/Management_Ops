@@ -238,3 +238,8 @@ CREATE TABLE IF NOT EXISTS incident_reports (
 
 CREATE INDEX idx_incidents_status ON incident_reports(status);
 CREATE INDEX idx_incidents_contract ON incident_reports(contract_id);
+
+-- Ensure default admin user exists (for dev-token login)
+INSERT INTO users (auth_id, email, name, role)
+VALUES ('dev-auth-1', 'admin@mactech.local', 'Dev Admin', 'Level 1')
+ON CONFLICT (auth_id) DO NOTHING;
