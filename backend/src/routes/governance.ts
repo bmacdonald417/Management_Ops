@@ -10,6 +10,7 @@ import {
   CLAUSE_CATEGORIES,
   CONTRACT_TYPES
 } from '../services/governanceScoring.js';
+import { computeGovernanceIndex } from '../services/governanceMaturity.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -577,6 +578,38 @@ router.get('/reports', async (_req, res) => {
 // Constants for frontend
 router.get('/constants', (_req, res) => {
   res.json({ categories: CLAUSE_CATEGORIES, contractTypes: CONTRACT_TYPES });
+});
+
+// Governance Completeness Index (maturity)
+router.get('/maturity', async (req, res) => {
+  try {
+    const result = await computeGovernanceIndex();
+    const storeSnapshot = req.query.store === 'true' || req.query.store === '1';
+    if (storeSnapshot) {
+      try {
+        await query(
+          `INSERT INTO governance_metric_snapshots (overall_score, pillar_contract, pillar_financial, pillar_cyber, pillar_insurance, pillar_structural, pillar_audit, pillar_documentation)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            result.overallScore,
+            result.pillarContract,
+            result.pillarFinancial,
+            result.pillarCyber,
+            result.pillarInsurance,
+            result.pillarStructural,
+            result.pillarAudit,
+            result.pillarDocumentation
+          ]
+        );
+      } catch (e) {
+        console.warn('Snapshot store failed (table may not exist):', e);
+      }
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('Maturity compute error:', err);
+    res.status(500).json({ error: 'Failed to compute maturity index' });
+  }
 });
 
 export default router;

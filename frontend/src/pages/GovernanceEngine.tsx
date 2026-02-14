@@ -97,6 +97,9 @@ export default function GovernanceEngine() {
         <Link to="/governance-engine/clause-library" className="text-gov-blue hover:underline font-medium">
           Clause Library →
         </Link>
+        <Link to="/governance-engine/maturity" className="text-gov-blue hover:underline font-medium">
+          Maturity Index →
+        </Link>
         <Link to="/governance-engine/reports" className="text-gov-blue hover:underline font-medium">
           Reports →
         </Link>

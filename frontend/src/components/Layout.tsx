@@ -15,6 +15,7 @@ const governanceSubNav = [
   { path: '/governance-engine', label: 'Pre-Bid Dashboard' },
   { path: '/governance-engine/solicitations', label: 'Solicitations' },
   { path: '/governance-engine/clause-library', label: 'Clause Library' },
+  { path: '/governance-engine/maturity', label: 'Maturity' },
   { path: '/governance-engine/reports', label: 'Reports' }
 ];
 
