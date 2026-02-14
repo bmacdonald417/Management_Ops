@@ -16,6 +16,10 @@ import GovernanceReports from './pages/GovernanceReports';
 import GovernanceAuditTrail from './pages/GovernanceAuditTrail';
 import GovernancePacketExport from './pages/GovernancePacketExport';
 import GovernanceMaturity from './pages/GovernanceMaturity';
+import GovernanceAutoBuilder from './pages/GovernanceAutoBuilder';
+import GovernanceAutoBuilderManual from './pages/GovernanceAutoBuilderManual';
+import GovernanceAutoBuilderEvidence from './pages/GovernanceAutoBuilderEvidence';
+import GovernanceAutoBuilderAppendices from './pages/GovernanceAutoBuilderAppendices';
 import Login from './pages/Login';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -50,6 +54,10 @@ function AppRoutes() {
         <Route path="governance-engine/solicitations/:id/export" element={<GovernancePacketExport />} />
         <Route path="governance-engine/clause-library" element={<GovernanceClauseLibrary />} />
         <Route path="governance-engine/maturity" element={<GovernanceMaturity />} />
+        <Route path="governance-engine/auto-builder" element={<GovernanceAutoBuilder />} />
+        <Route path="governance-engine/auto-builder/manual" element={<GovernanceAutoBuilderManual />} />
+        <Route path="governance-engine/auto-builder/evidence" element={<GovernanceAutoBuilderEvidence />} />
+        <Route path="governance-engine/auto-builder/appendices" element={<GovernanceAutoBuilderAppendices />} />
         <Route path="governance-engine/reports" element={<GovernanceReports />} />
         <Route path="financials" element={<Financials />} />
         <Route path="cyber" element={<Cyber />} />

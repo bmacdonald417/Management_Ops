@@ -11,6 +11,10 @@ import {
   CONTRACT_TYPES
 } from '../services/governanceScoring.js';
 import { computeGovernanceIndex } from '../services/governanceMaturity.js';
+import { loadAutoBuilderContext } from '../services/autoBuilder/context.js';
+import { generateManualMarkdown, generateEvidenceMarkdown } from '../services/autoBuilder/generate.js';
+import { SECTION_REGISTRY, APPENDIX_LIST } from '../services/autoBuilder/sectionRegistry.js';
+import { getImproveLinks } from '../services/autoBuilder/maturityBridge.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -609,6 +613,80 @@ router.get('/maturity', async (req, res) => {
   } catch (err) {
     console.error('Maturity compute error:', err);
     res.status(500).json({ error: 'Failed to compute maturity index' });
+  }
+});
+
+// Auto-Builder
+router.get('/auto-builder/context', async (_req, res) => {
+  try {
+    const ctx = await loadAutoBuilderContext();
+    const sectionEvals = SECTION_REGISTRY.map((s) => ({
+      ...s,
+      eval: s.maturityEvaluator(ctx),
+      improveLinks: getImproveLinks(s.id)
+    }));
+    const dci = sectionEvals.length > 0
+      ? sectionEvals.reduce((acc, s) => acc + s.eval.score0to1, 0) / sectionEvals.length * 100
+      : 0;
+    const weakest = [...sectionEvals].sort((a, b) => a.eval.score0to1 - b.eval.score0to1).slice(0, 10);
+    res.json({
+      context: ctx,
+      sectionEvals,
+      dci: Math.round(dci),
+      weakest,
+      disconnectIndicators: ctx.maturity.disconnectIndicators
+    });
+  } catch (err) {
+    console.error('Auto-builder context error:', err);
+    res.status(500).json({ error: 'Failed to load context' });
+  }
+});
+
+router.get('/auto-builder/manual', async (_req, res) => {
+  try {
+    const ctx = await loadAutoBuilderContext();
+    const markdown = generateManualMarkdown(ctx);
+    res.json({ markdown });
+  } catch (err) {
+    console.error('Manual generation error:', err);
+    res.status(500).json({ error: 'Failed to generate manual' });
+  }
+});
+
+router.get('/auto-builder/evidence', async (_req, res) => {
+  try {
+    const ctx = await loadAutoBuilderContext();
+    const markdown = generateEvidenceMarkdown(ctx);
+    res.json({ markdown });
+  } catch (err) {
+    console.error('Evidence generation error:', err);
+    res.status(500).json({ error: 'Failed to generate evidence packet' });
+  }
+});
+
+router.get('/auto-builder/appendices', async (_req, res) => {
+  try {
+    const ctx = await loadAutoBuilderContext();
+    const appendices = APPENDIX_LIST.map((title, i) => {
+      const letter = String.fromCharCode(65 + i);
+      let content = `*Placeholder for ${title}.* `;
+      let maturity = 'PLANNED';
+      if (title.includes('Clause') && title.includes('Library')) {
+        content = `Clause library has ${ctx.clauseLibraryStats.total} items. `;
+        maturity = ctx.clauseLibraryStats.total > 0 ? 'MANUAL' : 'PLANNED';
+      } else if (title.includes('Flow-Down')) {
+        content = `Flow-down clauses: ${JSON.stringify(ctx.clauseLibraryStats.flowDownCounts)}. `;
+        maturity = 'MANUAL';
+      } else if (title.includes('Governance KPI')) {
+        content = `GCI: ${ctx.maturity.overallScore}%. Pillars: Contract ${ctx.maturity.pillarContract}, Financial ${ctx.maturity.pillarFinancial}, etc. `;
+        maturity = 'AUTOMATED';
+      }
+      return { id: letter, title, content, maturity };
+    });
+    res.json({ appendices });
+  } catch (err) {
+    console.error('Appendices error:', err);
+    res.status(500).json({ error: 'Failed to load appendices' });
   }
 });
 

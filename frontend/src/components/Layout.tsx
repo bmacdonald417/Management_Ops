@@ -15,6 +15,7 @@ const governanceSubNav = [
   { path: '/governance-engine', label: 'Pre-Bid Dashboard' },
   { path: '/governance-engine/solicitations', label: 'Solicitations' },
   { path: '/governance-engine/clause-library', label: 'Clause Library' },
+  { path: '/governance-engine/auto-builder', label: 'Auto-Builder' },
   { path: '/governance-engine/maturity', label: 'Maturity' },
   { path: '/governance-engine/reports', label: 'Reports' }
 ];
@@ -25,7 +26,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <header className="bg-gov-navy text-white shadow">
+      <header className="bg-gov-navy text-white shadow print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-8">
@@ -61,7 +62,7 @@ export default function Layout() {
         </div>
       </header>
       {location.pathname.startsWith('/governance-engine') && (
-        <div className="bg-slate-100 border-b">
+        <div className="bg-slate-100 border-b print:hidden">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <nav className="flex gap-1 py-2">
               {governanceSubNav.map(({ path, label }) => {
