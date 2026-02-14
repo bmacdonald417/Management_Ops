@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 
 import contractsRouter from './routes/contracts.js';
 import complianceRouter from './routes/compliance.js';
+import clauseLibraryRouter from './routes/clauseLibrary.js';
 import financialsRouter from './routes/financials.js';
 import riskRouter from './routes/risk.js';
 import cyberRouter from './routes/cyber.js';
@@ -22,6 +23,7 @@ app.use(express.json());
 app.use('/api/auth', authRouter);
 app.use('/api/contracts', contractsRouter);
 app.use('/api/compliance', complianceRouter);
+app.use('/api/compliance', clauseLibraryRouter);
 app.use('/api/financials', financialsRouter);
 app.use('/api/risk', riskRouter);
 app.use('/api/cyber', cyberRouter);

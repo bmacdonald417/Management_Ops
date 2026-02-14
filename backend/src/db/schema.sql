@@ -249,25 +249,33 @@ CREATE TABLE IF NOT EXISTS risk_model_config (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Clause Library (internal reference, Quality/SysAdmin editable)
+-- Clause Library (enterprise source-of-truth, Quality/SysAdmin editable)
 CREATE TABLE IF NOT EXISTS clause_library_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   clause_number VARCHAR(50) NOT NULL,
   title TEXT NOT NULL,
+  type VARCHAR(20) DEFAULT 'OTHER',
   category VARCHAR(100),
   default_financial INTEGER DEFAULT 2,
   default_cyber INTEGER DEFAULT 2,
   default_liability INTEGER DEFAULT 2,
   default_regulatory INTEGER DEFAULT 2,
   default_performance INTEGER DEFAULT 2,
+  suggested_risk_level INTEGER CHECK (suggested_risk_level BETWEEN 1 AND 4),
+  flow_down VARCHAR(20) DEFAULT 'CONDITIONAL',
+  flow_down_notes TEXT,
   notes TEXT,
   active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_by UUID REFERENCES users(id),
   UNIQUE(clause_number)
 );
 CREATE INDEX IF NOT EXISTS idx_clause_library_number ON clause_library_items(clause_number);
 CREATE INDEX IF NOT EXISTS idx_clause_library_category ON clause_library_items(category);
+CREATE INDEX IF NOT EXISTS idx_clause_library_type ON clause_library_items(type);
+CREATE INDEX IF NOT EXISTS idx_clause_library_flow_down ON clause_library_items(flow_down);
+CREATE INDEX IF NOT EXISTS idx_clause_library_suggested_risk ON clause_library_items(suggested_risk_level);
 
 -- Solicitations
 CREATE TABLE IF NOT EXISTS solicitations (

@@ -9,16 +9,16 @@ export async function seedGovernanceEngine() {
   );
 
   const clauses = [
-    { clause_number: 'DFARS 252.204-7012', title: 'Safeguarding Covered Defense Information', category: 'Cyber/CUI', cyber: 5 },
-    { clause_number: 'DFARS 252.204-7021', title: 'CMMC Requirements', category: 'Cyber/CUI', cyber: 5 },
-    { clause_number: 'FAR 52.215-2', title: 'Audit and Records', category: 'Audit/Records', financial: 4 },
-    { clause_number: 'FAR 52.232-7', title: 'Payments Under Time-and-Materials', category: 'Financial', financial: 3 },
-    { clause_number: 'FAR 52.232-20', title: 'Limitation of Cost', category: 'Financial', financial: 4 },
-    { clause_number: 'FAR 52.249-2', title: 'Termination for Convenience', category: 'Termination', financial: 4, liability: 4 },
-    { clause_number: 'FAR 52.243-1', title: 'Changes - Fixed-Price', category: 'Changes', financial: 3 },
-    { clause_number: 'FAR 52.219-14', title: 'Limitations on Subcontracting', category: 'Small Business', regulatory: 3 },
-    { clause_number: 'FAR 52.222-41', title: 'Service Contract Labor Standards', category: 'Labor', regulatory: 3 },
-    { clause_number: 'FAR 52.242-15', title: 'Stop-Work Order', category: 'Performance', performance: 3 }
+    { clause_number: '252.204-7012', title: 'Safeguarding Covered Defense Information', category: 'CYBER_CUI', cyber: 5 },
+    { clause_number: '252.204-7021', title: 'CMMC Requirements', category: 'CYBER_CUI', cyber: 5 },
+    { clause_number: '52.215-2', title: 'Audit and Records', category: 'AUDIT_RECORDS', financial: 4 },
+    { clause_number: '52.232-7', title: 'Payments Under Time-and-Materials', category: 'FUNDING_PAYMENT', financial: 3 },
+    { clause_number: '52.232-20', title: 'Limitation of Cost', category: 'FUNDING_PAYMENT', financial: 4 },
+    { clause_number: '52.249-2', title: 'Termination for Convenience', category: 'TERMINATION', financial: 4, liability: 4 },
+    { clause_number: '52.243-1', title: 'Changes - Fixed-Price', category: 'CHANGES', financial: 3 },
+    { clause_number: '52.219-14', title: 'Limitations on Subcontracting', category: 'SMALL_BUSINESS', regulatory: 3 },
+    { clause_number: '52.222-41', title: 'Service Contract Labor Standards', category: 'LABOR', regulatory: 3 },
+    { clause_number: '52.242-15', title: 'Stop-Work Order', category: 'CHANGES', performance: 3 }
   ];
 
   for (const c of clauses) {

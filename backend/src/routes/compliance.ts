@@ -8,27 +8,7 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get('/library', async (req, res) => {
-  const { regulation, risk_level, search } = req.query;
-  let sql = 'SELECT * FROM compliance_clauses WHERE 1=1';
-  const params: unknown[] = [];
-  let i = 1;
-  if (regulation) {
-    sql += ` AND regulation = $${i++}`;
-    params.push(regulation);
-  }
-  if (risk_level) {
-    sql += ` AND risk_level = $${i++}`;
-    params.push(parseInt(risk_level as string));
-  }
-  if (search) {
-    sql += ` AND (clause_number ILIKE $${i++} OR title ILIKE $${i++})`;
-    params.push(`%${search}%`, `%${search}%`);
-  }
-  sql += ' ORDER BY clause_number ASC';
-  const result = await query(sql, params);
-  res.json(result.rows);
-});
+// Library routes moved to clauseLibrary.ts (clause_library_items)
 
 router.get('/contracts/:contractId/clauses', async (req, res) => {
   const { contractId } = req.params;
