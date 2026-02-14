@@ -105,7 +105,7 @@ export async function loadAutoBuilderContext(): Promise<AutoBuilderContext> {
       `SELECT s.id FROM solicitations s LEFT JOIN approvals a ON a.solicitation_id = s.id AND a.status = 'Approved'
        WHERE s.status = 'FINALIZED' GROUP BY s.id HAVING COUNT(a.id) = 0`
     )).rows.length;
-    const escRows = (await query(`SELECT cyber_review_required, financial_review_required, escalation_required FROM solicitations WHERE escalation_required = true OR cyber_review_required = true OR financial_review_required = true`)).rows as { cyber_review_required?: boolean; financial_review_required?: boolean }[];
+    const escRows = (await query(`SELECT cyber_review_required, financial_review_required, escalation_required FROM solicitations WHERE escalation_required = true OR cyber_review_required = true OR financial_review_required = true`)).rows as { cyber_review_required?: boolean; financial_review_required?: boolean; escalation_required?: boolean }[];
     const escalations = { cyber: 0, financial: 0, indemn: escRows.filter((r) => r.escalation_required).length, audit: 0 };
     for (const r of escRows) {
       if (r.cyber_review_required) escalations.cyber++;
