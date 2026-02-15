@@ -10,18 +10,16 @@ import { existsSync, statSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/** Prefer flat (part_52.html) over nested (part_52.html/part_52.html). */
 function resolvePath(filename: string): string | null {
-  const candidates = [
-    join(process.cwd(), 'regulatory', filename, filename),
-    join(process.cwd(), 'regulatory', filename),
-    join(process.cwd(), 'dist', 'regulatory', filename),
-    join(process.cwd(), 'backend', 'regulatory', filename, filename),
-    join(process.cwd(), 'backend', 'regulatory', filename),
-    join(__dirname, '..', 'regulatory', filename, filename),
-    join(__dirname, '..', 'regulatory', filename),
-    join(__dirname, '..', '..', 'regulatory', filename, filename),
-    join(__dirname, '..', '..', 'regulatory', filename),
+  const bases = [
+    join(process.cwd(), 'regulatory'),
+    join(process.cwd(), 'dist', 'regulatory'),
+    join(process.cwd(), 'backend', 'regulatory'),
+    join(__dirname, '..', 'regulatory'),
+    join(__dirname, '..', '..', 'regulatory'),
   ];
+  const candidates = bases.flatMap((base) => [join(base, filename), join(base, filename, filename)]);
   for (const p of candidates) {
     try {
       if (existsSync(p) && statSync(p).isFile()) return p;

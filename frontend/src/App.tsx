@@ -11,6 +11,10 @@ import GovernanceEngine from './pages/GovernanceEngine';
 import GovernanceSolicitations from './pages/GovernanceSolicitations';
 import GovernanceSolicitationNew from './pages/GovernanceSolicitationNew';
 import GovernanceSolicitationReview from './pages/GovernanceSolicitationReview';
+import GovernanceSolicitationEngineDetail from './pages/GovernanceSolicitationEngineDetail';
+import GovernanceClauseAssess from './pages/GovernanceClauseAssess';
+import GovernanceClauseApprove from './pages/GovernanceClauseApprove';
+import GovernanceSolicitationEngineNew from './pages/GovernanceSolicitationEngineNew';
 import GovernanceClauseLibrary from './pages/GovernanceClauseLibrary';
 import GovernanceReports from './pages/GovernanceReports';
 import GovernanceAuditTrail from './pages/GovernanceAuditTrail';
@@ -52,8 +56,12 @@ function AppRoutes() {
         <Route path="governance-engine" element={<GovernanceEngine />} />
         <Route path="governance-engine/solicitations" element={<GovernanceSolicitations />} />
         <Route path="governance-engine/solicitations/new" element={<GovernanceSolicitationNew />} />
+        <Route path="governance-engine/solicitations/engine/new" element={<GovernanceSolicitationEngineNew />} />
         <Route path="governance-engine/solicitations/:id" element={<GovernanceSolicitationReview />} />
         <Route path="governance-engine/solicitations/:id/review" element={<GovernanceSolicitationReview />} />
+        <Route path="governance-engine/solicitations/:id/engine" element={<GovernanceSolicitationEngineDetail />} />
+        <Route path="governance-engine/solicitations/:id/engine/assess/:scId" element={<GovernanceClauseAssess />} />
+        <Route path="governance-engine/solicitations/:id/engine/approve/:scId" element={<GovernanceClauseApprove />} />
         <Route path="governance-engine/solicitations/:id/audit" element={<GovernanceAuditTrail />} />
         <Route path="governance-engine/solicitations/:id/export" element={<GovernancePacketExport />} />
         <Route path="governance-engine/clause-library" element={<GovernanceClauseLibrary />} />

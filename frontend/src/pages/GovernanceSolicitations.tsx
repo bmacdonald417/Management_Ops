@@ -29,33 +29,57 @@ export default function GovernanceSolicitations() {
   useEffect(() => {
     const params: Record<string, string> = {};
     searchParams.forEach((v, k) => { params[k] = v; });
-    client.get('/governance/solicitations', { params }).then((r) => {
-      setSols(r.data);
+    Promise.all([
+      client.get('/solicitations', { params }),
+      client.get('/governance/solicitations', { params }).catch(() => ({ data: [] }))
+    ]).then(([r1, r2]) => {
+      const engine = (r1.data ?? []) as Solicitation[];
+      const legacy = (r2.data ?? []) as Solicitation[];
+      const seen = new Set(engine.map((s) => s.id));
+      const combined = [...engine, ...legacy.filter((s) => !seen.has(s.id))];
+      combined.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      setSols(combined);
       setLoading(false);
     });
   }, [searchParams]);
 
   const statusColors: Record<string, string> = {
     DRAFT: 'bg-slate-100 text-slate-800',
+    CLAUSE_EXTRACTION_PENDING: 'bg-blue-50 text-blue-800',
+    CLAUSE_EXTRACTION_COMPLETE: 'bg-blue-100 text-blue-800',
+    REVIEW_IN_PROGRESS: 'bg-amber-50 text-amber-800',
+    REVIEW_COMPLETE: 'bg-amber-100 text-amber-800',
+    APPROVAL_REQUIRED: 'bg-amber-100 text-amber-800',
+    APPROVED_TO_BID: 'bg-green-100 text-green-800',
     IN_REVIEW: 'bg-blue-100 text-blue-800',
     AWAITING_APPROVALS: 'bg-amber-100 text-amber-800',
     APPROVED: 'bg-emerald-100 text-emerald-800',
     FINALIZED: 'bg-green-100 text-green-800'
   };
 
+  const useEngine = (s: Solicitation) =>
+    ['CLAUSE_EXTRACTION_PENDING', 'CLAUSE_EXTRACTION_COMPLETE', 'REVIEW_IN_PROGRESS', 'REVIEW_COMPLETE', 'APPROVAL_REQUIRED', 'APPROVED_TO_BID'].includes(s.status);
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="font-display font-bold text-2xl text-gov-navy">Solicitations</h1>
-        <Link to="/governance-engine/solicitations/new" className="px-4 py-2 bg-gov-blue text-white rounded-lg font-medium hover:bg-gov-blue-light">
-          New Solicitation
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/governance-engine/solicitations/engine/new" className="px-4 py-2 bg-gov-blue text-white rounded-lg font-medium hover:bg-gov-blue-light">
+            New (Engine)
+          </Link>
+          <Link to="/governance-engine/solicitations/new" className="px-4 py-2 border border-gov-blue text-gov-blue rounded-lg font-medium">
+            New (Legacy)
+          </Link>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-4">
         <Link to="/governance-engine/solicitations" className={`px-4 py-2 rounded-lg text-sm ${!searchParams.get('status') ? 'bg-gov-blue text-white' : 'bg-slate-200'}`}>All</Link>
         <Link to="?status=DRAFT" className={`px-4 py-2 rounded-lg text-sm ${searchParams.get('status') === 'DRAFT' ? 'bg-gov-blue text-white' : 'bg-slate-200'}`}>Draft</Link>
+        <Link to="?status=CLAUSE_EXTRACTION_PENDING" className={`px-4 py-2 rounded-lg text-sm ${searchParams.get('status') === 'CLAUSE_EXTRACTION_PENDING' ? 'bg-gov-blue text-white' : 'bg-slate-200'}`}>Extraction</Link>
         <Link to="?status=AWAITING_APPROVALS" className={`px-4 py-2 rounded-lg text-sm ${searchParams.get('status') === 'AWAITING_APPROVALS' ? 'bg-gov-blue text-white' : 'bg-slate-200'}`}>Awaiting Approval</Link>
+        <Link to="?status=APPROVED_TO_BID" className={`px-4 py-2 rounded-lg text-sm ${searchParams.get('status') === 'APPROVED_TO_BID' ? 'bg-gov-blue text-white' : 'bg-slate-200'}`}>Approved to Bid</Link>
         <Link to="?status=FINALIZED" className={`px-4 py-2 rounded-lg text-sm ${searchParams.get('status') === 'FINALIZED' ? 'bg-gov-blue text-white' : 'bg-slate-200'}`}>Finalized</Link>
       </div>
 
@@ -80,7 +104,7 @@ export default function GovernanceSolicitations() {
               {sols.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4">
-                    <Link to={`/governance-engine/solicitations/${s.id}/review`} className="font-medium text-gov-blue hover:underline">
+                    <Link to={useEngine(s) ? `/governance-engine/solicitations/${s.id}/engine` : `/governance-engine/solicitations/${s.id}/review`} className="font-medium text-gov-blue hover:underline">
                       {s.solicitation_number}
                     </Link>
                     <div className="text-xs text-slate-500">{s.title}</div>
@@ -103,7 +127,7 @@ export default function GovernanceSolicitations() {
                   </td>
                   <td className="px-6 py-4 text-sm">{s.owner_name ?? '—'}</td>
                   <td className="px-6 py-4">
-                    <Link to={`/governance-engine/solicitations/${s.id}/review`} className="text-gov-blue hover:underline text-sm">
+                    <Link to={useEngine(s) ? `/governance-engine/solicitations/${s.id}/engine` : `/governance-engine/solicitations/${s.id}/review`} className="text-gov-blue hover:underline text-sm">
                       View / Continue
                     </Link>
                   </td>

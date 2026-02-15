@@ -11,7 +11,8 @@
     "db:seed:prod": "node dist/db/seeds/index.js",
     "reg:ingest": "tsx src/scripts/ingestRegulations.ts",
     "start": "node dist/scripts/prodBoot.js",
-    "start:prod": "node dist/scripts/prodBoot.js","reg:ingest:prod": "node dist/scripts/ingestRegulations.js","reg:verify": "tsx src/scripts/regVerify.ts","reg:verify:prod": "node dist/scripts/regVerify.js"
+    "start:prod": "node dist/scripts/prodBoot.js","reg:ingest:prod": "node dist/scripts/ingestRegulations.js","seed:engine-demo": "tsx src/scripts/seedGovernanceEngineDemo.ts",
+    "reg:verify": "tsx src/scripts/regVerify.ts","reg:verify:prod": "node dist/scripts/regVerify.js"
   },
   "dependencies": {
     "cheerio": "^1.2.0",

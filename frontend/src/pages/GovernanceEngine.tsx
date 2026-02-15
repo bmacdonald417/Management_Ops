@@ -23,12 +23,14 @@ export default function GovernanceEngine() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="font-display font-bold text-2xl text-gov-navy">Governance Engine</h1>
-        <Link
-          to="/governance-engine/solicitations/new"
-          className="px-4 py-2 bg-gov-blue text-white rounded-lg font-medium hover:bg-gov-blue-light"
-        >
-          New Solicitation
-        </Link>
+        <div className="flex gap-2">
+          <Link to="/governance-engine/solicitations/engine/new" className="px-4 py-2 bg-gov-blue text-white rounded-lg font-medium hover:bg-gov-blue-light">
+            New Solicitation (Engine)
+          </Link>
+          <Link to="/governance-engine/solicitations/new" className="px-4 py-2 border border-gov-blue text-gov-blue rounded-lg font-medium">
+            New (Legacy)
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">

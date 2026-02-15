@@ -26,9 +26,9 @@ function copyIfExists(src: string, destFile: string): boolean {
 
 mkdirSync(dest, { recursive: true });
 
-// Support nested (part_52.html/part_52.html) or flat (part_52.html) source
-const farNested = join(root, 'regulatory', 'part_52.html', 'part_52.html');
+// Prefer flat part_52.html over nested part_52.html/part_52.html
 const farFlat = join(root, 'regulatory', 'part_52.html');
+const farNested = join(root, 'regulatory', 'part_52.html', 'part_52.html');
 // DFARS: part252.html (no underscore) or part_252.html
 const dfarsSources = [
   join(root, 'regulatory', 'part252.html'),
@@ -37,6 +37,6 @@ const dfarsSources = [
 ];
 
 let ok = 0;
-if (copyIfExists(farNested, join(dest, 'part_52.html')) || copyIfExists(farFlat, join(dest, 'part_52.html'))) ok++;
+if (copyIfExists(farFlat, join(dest, 'part_52.html')) || copyIfExists(farNested, join(dest, 'part_52.html'))) ok++;
 if (dfarsSources.some((src) => copyIfExists(src, join(dest, 'part_252.html')))) ok++;
 console.log(`[build] Copied ${ok}/2 regulatory HTML files to dist/regulatory/`);

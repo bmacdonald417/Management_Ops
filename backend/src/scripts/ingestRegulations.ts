@@ -31,18 +31,21 @@ function resolveRegulatoryPath(filename: string): string {
   throw new Error(msg);
 }
 
+/** Prefer flat (part_52.html) over nested (part_52.html/part_52.html) so prod resolves to single file. */
 function buildCandidates(filename: string): string[] {
-  return [
-    join(process.cwd(), 'regulatory', filename, filename),
-    join(process.cwd(), 'regulatory', filename),
-    join(process.cwd(), 'dist', 'regulatory', filename),
-    join(process.cwd(), 'backend', 'regulatory', filename, filename),
-    join(process.cwd(), 'backend', 'regulatory', filename),
-    join(__dirname, '..', 'regulatory', filename, filename),
-    join(__dirname, '..', 'regulatory', filename),
-    join(__dirname, '..', '..', 'regulatory', filename, filename),
-    join(__dirname, '..', '..', 'regulatory', filename),
+  const bases = [
+    join(process.cwd(), 'regulatory'),
+    join(process.cwd(), 'dist', 'regulatory'),
+    join(process.cwd(), 'backend', 'regulatory'),
+    join(__dirname, '..', 'regulatory'),
+    join(__dirname, '..', '..', 'regulatory'),
   ];
+  const out: string[] = [];
+  for (const base of bases) {
+    out.push(join(base, filename));
+    out.push(join(base, filename, filename));
+  }
+  return out;
 }
 
 function tryResolveRegulatoryPath(filename: string): string | null {
