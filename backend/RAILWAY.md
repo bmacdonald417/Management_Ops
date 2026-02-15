@@ -12,8 +12,9 @@ Uses Railway Postgres with internal hostname (`*.railway.internal`). `DATABASE_U
 
 ## Regulatory Files
 
-- `backend/regulatory/part_52.html/` and `part_252.html/` are included in the repo (not gitignored).
-- Build copies them to `dist/regulatory/` so they are available at runtime.
+- `backend/regulatory/part_52.html/` and `part_252.html/` (nested) or flat `part_52.html`, `part_252.html`.
+- Build copies to `dist/regulatory/part_52.html`, `dist/regulatory/part_252.html` (flat).
+- For DFARS hundreds of clauses: use full acquisition.gov Part 252 (Subpart 252.2), not PGI Part 252.
 - Ingestion reads from `dist/regulatory/` or `backend/regulatory/` depending on cwd.
 
 ## Regulatory Ingestion

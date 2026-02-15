@@ -17,28 +17,52 @@ import { classifyClauseRisk } from '../services/clauseRiskEngine.js';
 import { upsertDocument } from '../services/complianceKB/ingest.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync } from 'fs';
+import { existsSync, statSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** Resolve regulatory HTML paths. Returns absolute path or throws. */
-function resolveRegulatoryPath(relPath: string): string {
-  const candidates = [
-    join(__dirname, '..', relPath),
-    join(__dirname, '..', '..', relPath),
-    join(process.cwd(), relPath),
-    join(process.cwd(), 'backend', relPath),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-  const msg = `FATAL: Regulatory HTML not found. Checked paths:\n${candidates.map((p) => `  - ${p}`).join('\n')}`;
+/** Resolve regulatory HTML paths. Supports flat (part_52.html) and nested (part_52.html/part_52.html). */
+function resolveRegulatoryPath(filename: string): string {
+  const found = tryResolveRegulatoryPath(filename);
+  if (found) return found;
+  const candidates = buildCandidates(filename);
+  const msg = `FATAL: Regulatory HTML not found: ${filename}. Checked:\n${candidates.map((p) => `  - ${p}`).join('\n')}`;
   console.error(msg);
   throw new Error(msg);
 }
 
-const FAR_PATH = resolveRegulatoryPath('regulatory/part_52.html/part_52.html');
-const DFARS_PATH = resolveRegulatoryPath('regulatory/part_252.html/part_252.html');
+function buildCandidates(filename: string): string[] {
+  return [
+    join(process.cwd(), 'regulatory', filename, filename),
+    join(process.cwd(), 'regulatory', filename),
+    join(process.cwd(), 'dist', 'regulatory', filename),
+    join(process.cwd(), 'backend', 'regulatory', filename, filename),
+    join(process.cwd(), 'backend', 'regulatory', filename),
+    join(__dirname, '..', 'regulatory', filename, filename),
+    join(__dirname, '..', 'regulatory', filename),
+    join(__dirname, '..', '..', 'regulatory', filename, filename),
+    join(__dirname, '..', '..', 'regulatory', filename),
+  ];
+}
+
+function tryResolveRegulatoryPath(filename: string): string | null {
+  for (const p of buildCandidates(filename)) {
+    if (existsSync(p) && statSync(p).isFile()) return p;
+  }
+  return null;
+}
+
+/** DFARS may be part252.html or part_252.html (no underscore). */
+function resolveDFARSPath(): string {
+  const found = tryResolveRegulatoryPath('part252.html') ?? tryResolveRegulatoryPath('part_252.html');
+  if (found) return found;
+  const msg = `FATAL: DFARS HTML not found. Place file as regulatory/part252.html or regulatory/part_252.html`;
+  console.error(msg);
+  throw new Error(msg);
+}
+
+const FAR_PATH = resolveRegulatoryPath('part_52.html');
+const DFARS_PATH = resolveDFARSPath();
 
 interface IngestResult {
   inserted: number;
@@ -121,14 +145,29 @@ async function ensureGovernanceRequirement(clauseId: string, weight: number): Pr
 async function runIngestion(): Promise<IngestResult> {
   const result: IngestResult = { inserted: 0, skipped: 0, farCount: 0, dfarsCount: 0 };
 
-  console.log('[Ingest] Loading FAR from:', FAR_PATH);
-  console.log('[Ingest] Loading DFARS from:', DFARS_PATH);
+  console.log('[Ingest] Loading FAR from:', FAR_PATH, 'exists:', existsSync(FAR_PATH));
+  console.log('[Ingest] Loading DFARS from:', DFARS_PATH, 'exists:', existsSync(DFARS_PATH));
 
   const farClauses = loadAndParseFAR52(FAR_PATH);
-  const dfarsClauses = loadAndParseDFARS252(DFARS_PATH);
   result.farCount = farClauses.length;
+  console.log('[Ingest] FAR parsed:', result.farCount, 'clauses');
+
+  const dfarsClauses = loadAndParseDFARS252(DFARS_PATH, (msg) => console.log('[Ingest]', msg));
   result.dfarsCount = dfarsClauses.length;
-  console.log('[Ingest] Parsed FAR:', result.farCount, 'clauses, DFARS:', result.dfarsCount, 'clauses');
+  console.log('[Ingest] DFARS parsed:', result.dfarsCount, 'clauses');
+
+  if (result.dfarsCount > 0) {
+    const sample = dfarsClauses.slice(0, 5);
+    console.log('[Ingest] First 5 DFARS clauses:');
+    sample.forEach((c, i) => console.log(`  ${i + 1}. ${c.clauseNumber} - ${c.title.slice(0, 60)}${c.title.length > 60 ? '...' : ''}`));
+  }
+  if (result.dfarsCount < 100 && process.env.SKIP_DFARS_MIN_COUNT !== 'true') {
+    throw new Error(
+      `DFARS parse count (${result.dfarsCount}) is below 100. Likely selector mismatch or wrong file. ` +
+      'Ensure part_252.html is the full acquisition.gov DFARS Part 252 (Subpart 252.2), not PGI Part 252. ' +
+      'Set SKIP_DFARS_MIN_COUNT=true to bypass during development.'
+    );
+  }
 
   const allClauses = [
     ...farClauses.map((c) => ({ ...c, regulationType: 'FAR' as const })),

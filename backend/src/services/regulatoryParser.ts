@@ -165,34 +165,143 @@ export function parseFAR52Html(html: string): ParsedClause[] {
   return [...byNum.values()].sort((a, b) => a.clauseNumber.localeCompare(b.clauseNumber));
 }
 
-/** Parse DFARS Part 252 HTML file */
-export function parseDFARS252Html(html: string): ParsedClause[] {
+/** DFARS clause pattern: 252.XXX-XXXX or 252.XXX-XXX */
+const DFARS_CLAUSE_RE = /252\.(\d{3})-(\d{3,4})\s+(.+?)(?=\s*\(|\.$|$)/;
+
+/** Extract DFARS clause from link/text: "252.204-7012 Safeguarding Covered Defense..." */
+function extractDfarsClause(text: string): { clauseNumber: string; title: string } | null {
+  const t = text.trim();
+  const m = t.match(/^(252\.\d{3}-\d{3,4})\s+(.+)$/);
+  if (!m) return null;
+  const title = m[2].replace(/\.\s*$/, '').trim();
+  if (title.length < 2) return null;
+  return { clauseNumber: m[1], title };
+}
+
+/** Parse DFARS Part 252 HTML (acquisition.gov or PGI structure) */
+export function parseDFARS252Html(html: string, log?: (msg: string) => void): ParsedClause[] {
   const $ = cheerio.load(html);
   const clauses: ParsedClause[] = [];
   const seen = new Set<string>();
+  const logfn = log ?? (() => {});
 
-  // DFARS articles: id like DFARS_252_* or similar
+  let candidateCount = 0;
+
+  // Method 1: All links with 252.XXX-XXXX in text (acquisition.gov)
+  $('a').each((_, el) => {
+    const text = $(el).text().trim();
+    if (!text.includes('252.')) return;
+    candidateCount++;
+    const parsed = extractDfarsClause(text);
+    if (!parsed) return;
+    const normalized = normalizeClauseNumber(parsed.clauseNumber, 'DFARS');
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+
+    const href = $(el).attr('href') || '';
+    const fullTextUrl = href.startsWith('http') ? href : null;
+    const fullText = fullTextUrl ? `[Full text: ${fullTextUrl}] ${parsed.title}` : parsed.title;
+
+    const subpartMatch = parsed.clauseNumber.match(/^252\.(\d+)/);
+    clauses.push({
+      clauseNumber: normalized,
+      regulationType: 'DFARS',
+      title: parsed.title,
+      fullText,
+      part: '252',
+      subpart: subpartMatch ? `252.${subpartMatch[1]}` : null,
+      hierarchyLevel: 2,
+    });
+  });
+
+  // Method 2: TOC links (PGI / dita structure)
+  $('a.xref.fm\\:TOC[href*="252"], a[href*="252"]').each((_, el) => {
+    const text = $(el).text().trim();
+    candidateCount++;
+    const parsed = extractDfarsClause(text);
+    if (!parsed) {
+      const pgi = text.match(/PGI\s+252\.(\d+)(?:\.(\d+))?\s*[-–]?\s*(.+)/i);
+      if (pgi) {
+        const clauseNum = pgi[2] ? `252.${pgi[1]}-${pgi[2]}` : `252.${pgi[1]}`;
+        const normalized = normalizeClauseNumber(clauseNum, 'DFARS');
+        if (!seen.has(normalized)) {
+          seen.add(normalized);
+          clauses.push({
+            clauseNumber: normalized,
+            regulationType: 'DFARS',
+            title: pgi[3]?.trim() || clauseNum,
+            fullText: text,
+            part: '252',
+            subpart: `252.${pgi[1]}`,
+            hierarchyLevel: 2,
+          });
+        }
+      }
+      return;
+    }
+    const normalized = normalizeClauseNumber(parsed.clauseNumber, 'DFARS');
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+
+    const id = ($(el).attr('href') || '').replace(/^#/, '');
+    let fullText = parsed.title;
+    if (id) {
+      const article = $(`#${id.replace(/[.]/g, '\\.')}`);
+      if (article.length) {
+        const body = article.find('.body.conbody, .body').first();
+        if (body.length) fullText = body.find('p').map((__, p) => $(p).text().trim()).get().filter(Boolean).join('\n\n') || body.text().trim() || parsed.title;
+      }
+    }
+
+    clauses.push({
+      clauseNumber: normalized,
+      regulationType: 'DFARS',
+      title: parsed.title,
+      fullText,
+      part: '252',
+      subpart: parsed.clauseNumber.match(/^252\.(\d+)/)?.[1] ? `252.${parsed.clauseNumber.match(/^252\.(\d+)/)![1]}` : null,
+      hierarchyLevel: 2,
+    });
+  });
+
+  // Method 3: Raw regex on HTML for acquisition.gov plain text structure
+  const rawRe = /252\.(\d{3})-(\d{3,4})\s+([^<\n]+?)(?=\s*252\.|\s*$|<\/)/g;
+  let rawM;
+  while ((rawM = rawRe.exec(html)) !== null) {
+    candidateCount++;
+    const clauseNum = `252.${rawM[1]}-${rawM[2]}`;
+    const title = rawM[3].trim();
+    if (title.length < 2) continue;
+    const normalized = normalizeClauseNumber(clauseNum, 'DFARS');
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    clauses.push({
+      clauseNumber: normalized,
+      regulationType: 'DFARS',
+      title,
+      fullText: title,
+      part: '252',
+      subpart: `252.${rawM[1]}`,
+      hierarchyLevel: 2,
+    });
+  }
+
+  // Method 4: Articles with id containing 252
   $('article[id*="252"]').each((_, el) => {
     const id = $(el).attr('id') || '';
     let clauseNum = dfarsIdToClauseNumber(id);
     if (!clauseNum) {
-      // PGI 252.103 style
       const pgi = id.match(/DFARS_PGI_252\.?(\d+)/i);
       if (pgi) clauseNum = `252.${pgi[1]}`;
     }
     if (!clauseNum) return;
+    candidateCount++;
 
     const h = $(el).find('h1.title, h2.title, h3.title, h4.title').first();
     const autonum = h.find('.ph.autonumber').first().text().trim();
     let title = h.clone().children().remove().end().text().replace(autonum, '').trim() || autonum;
-
     const body = $(el).find('.body.conbody, .body').first();
-    let fullText = body.length
-      ? body.find('p').map((__, p) => $(p).text().trim()).get().filter(Boolean).join('\n\n') || body.text().trim()
-      : title;
-
-    const subpartMatch = clauseNum.match(/^252\.(\d+)/);
-    const subpart = subpartMatch ? `252.${subpartMatch[1]}` : null;
+    let fullText = body.length ? body.find('p').map((__, p) => $(p).text().trim()).get().filter(Boolean).join('\n\n') || body.text().trim() : title;
 
     const normalized = normalizeClauseNumber(clauseNum, 'DFARS');
     if (seen.has(normalized)) return;
@@ -201,49 +310,15 @@ export function parseDFARS252Html(html: string): ParsedClause[] {
     clauses.push({
       clauseNumber: normalized,
       regulationType: 'DFARS',
-      title,
-      fullText: fullText || title,
+      title: title || clauseNum,
+      fullText: fullText || title || clauseNum,
       part: '252',
-      subpart,
+      subpart: clauseNum.match(/^252\.(\d+)/)?.[1] ? `252.${clauseNum.match(/^252\.(\d+)/)![1]}` : null,
       hierarchyLevel: 2,
     });
   });
 
-  // TOC links
-  $('a.xref.fm\\:TOC[href*="252"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
-    const id = href.replace(/^#/, '');
-    const linkText = $(el).text().trim();
-
-    const m = linkText.match(/^(\d{3}\.\d+(?:-\d+)?)\s+(.+)$/) || linkText.match(/^PGI\s+(\d{3}\.\d+(?:\.\d+)?)\s*[-–]?\s*(.+)$/i);
-    const clauseNum = m ? m[1].replace(/\.(\d+)$/, '.$1') : null;
-    if (!clauseNum) return;
-
-    const title = m ? m[2].trim() : linkText;
-    const normalized = normalizeClauseNumber(clauseNum, 'DFARS');
-    if (seen.has(normalized)) return;
-    seen.add(normalized);
-
-    const article = $(`#${id.replace(/[.]/g, '\\.')}`);
-    let fullText = title;
-    if (article.length) {
-      const body = article.find('.body.conbody, .body').first();
-      if (body.length) fullText = body.find('p').map((__, p) => $(p).text().trim()).get().filter(Boolean).join('\n\n') || body.text().trim() || title;
-    }
-
-    const subpartMatch = clauseNum.match(/^252\.(\d+)/);
-    const subpart = subpartMatch ? `252.${subpartMatch[1]}` : null;
-
-    clauses.push({
-      clauseNumber: normalized,
-      regulationType: 'DFARS',
-      title,
-      fullText,
-      part: '252',
-      subpart,
-      hierarchyLevel: 2,
-    });
-  });
+  logfn(`DFARS: ${candidateCount} candidate nodes, ${clauses.length} clauses extracted`);
 
   const byNum = new Map<string, ParsedClause>();
   for (const c of clauses) {
@@ -251,19 +326,19 @@ export function parseDFARS252Html(html: string): ParsedClause[] {
       byNum.set(c.clauseNumber, c);
     }
   }
-  return [...byNum.values()].sort((a, b) => a.clauseNumber.localeCompare(b.clauseNumber));
+  const result = [...byNum.values()].sort((a, b) => a.clauseNumber.localeCompare(b.clauseNumber));
+  logfn(`DFARS: ${result.length} unique clauses after dedup`);
+  return result;
 }
 
-/** Load and parse FAR 52 from default path */
-export function loadAndParseFAR52(basePath?: string): ParsedClause[] {
-  const p = basePath ?? join(__dirname, '../../regulatory/part_52.html/part_52.html');
-  const html = readFileSync(p, 'utf-8');
+/** Load and parse FAR 52 from path */
+export function loadAndParseFAR52(basePath: string): ParsedClause[] {
+  const html = readFileSync(basePath, 'utf-8');
   return parseFAR52Html(html);
 }
 
-/** Load and parse DFARS 252 from default path */
-export function loadAndParseDFARS252(basePath?: string): ParsedClause[] {
-  const p = basePath ?? join(__dirname, '../../regulatory/part_252.html/part_252.html');
-  const html = readFileSync(p, 'utf-8');
-  return parseDFARS252Html(html);
+/** Load and parse DFARS 252 from path */
+export function loadAndParseDFARS252(basePath: string, log?: (msg: string) => void): ParsedClause[] {
+  const html = readFileSync(basePath, 'utf-8');
+  return parseDFARS252Html(html, log);
 }
