@@ -5,6 +5,10 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { ingestCsv } from '../services/complianceRegistry/ingestion.js';
 import { setActiveVersionForCategory } from '../services/complianceRegistry/versionControl.js';
 import { getRegistryStats } from '../services/complianceRegistry/registryStats.js';
+import { getKBStats } from '../services/complianceKB/stats.js';
+import { chunkAllDocuments } from '../services/complianceKB/chunk.js';
+import { runEmbeddingJob, hasEmbeddingSupport } from '../services/complianceKB/embeddings.js';
+import { syncDocumentsFromRegistry } from '../services/complianceKB/ingest.js';
 import { z } from 'zod';
 import type { RegistryCategory } from '../services/complianceRegistry/types.js';
 
@@ -77,7 +81,31 @@ router.post('/compliance-registry/upload', upload.single('file'), async (req, re
     body.effectiveDate,
     req.user!.id
   );
+  if (result.validationStatus === 'VALID') {
+    syncDocumentsFromRegistry().catch((e) => console.error('Post-upload sync failed:', e));
+  }
   res.status(201).json(result);
+});
+
+router.get('/compliance-registry/kb-stats', async (_req, res) => {
+  const stats = await getKBStats();
+  res.json({ ...stats, hasEmbeddingSupport: hasEmbeddingSupport() });
+});
+
+router.post('/compliance-registry/sync-documents', async (_req, res) => {
+  const result = await syncDocumentsFromRegistry();
+  res.json(result);
+});
+
+router.post('/compliance-registry/run-chunking', async (_req, res) => {
+  const result = await chunkAllDocuments();
+  res.json(result);
+});
+
+router.post('/compliance-registry/run-embeddings', async (req, res) => {
+  const limit = Math.min(parseInt(String(req.query.limit ?? '100'), 10) || 100, 500);
+  const result = await runEmbeddingJob(limit);
+  res.json(result);
 });
 
 router.post('/compliance-registry/sources/:id/activate', async (req, res) => {

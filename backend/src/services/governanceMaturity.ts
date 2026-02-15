@@ -1,4 +1,5 @@
 import { query } from '../db/connection.js';
+import { getKBStats } from '../complianceKB/stats.js';
 
 export interface MaturityMetrics {
   reviewRate: number;
@@ -153,6 +154,11 @@ export async function computeGovernanceIndex(): Promise<MaturityResult> {
       disconnectIndicators.push(`Clauses manually entered not from library (${totCl - fromLib})`);
     }
 
+    const kbStats = await getKBStats();
+    if (kbStats.chunksCount > 0 && kbStats.embeddingCoverage < 0.8) {
+      const pct = Math.round(kbStats.embeddingCoverage * 100);
+      disconnectIndicators.push(`Knowledge base embedding coverage low (${pct}% - run embeddings)`);
+    }
   } catch (err) {
     console.error('Governance maturity compute error:', err);
     return buildResult(metrics, ['Error computing metrics'], []);

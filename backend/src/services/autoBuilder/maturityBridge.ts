@@ -15,7 +15,7 @@ const SECTION_ROUTES: Record<string, ImproveLink[]> = {
   '2.0': [{ label: 'Maturity Index', href: '/governance-engine/maturity', reason: 'GCI scoring' }],
   '2.1': [{ label: 'Governance Maturity', href: '/governance-engine/maturity', reason: 'Governance Completeness Index' }],
   '2.2': [{ label: 'Maturity Pillars', href: '/governance-engine/maturity', reason: 'Pillar methodology' }],
-  '2.3': [{ label: 'Auto-Builder', href: '/governance-engine/auto-builder', reason: 'Automation classification' }],
+  '2.3': [{ label: 'Auto-Builder', href: '/governance-engine/auto-builder', reason: 'Automation classification' }, { label: 'Run Embeddings', href: '/admin/compliance-registry', reason: 'KB embedding coverage' }],
   '2.4': [{ label: 'Audit Trail', href: '/governance-engine/solicitations', reason: 'System telemetry' }],
   '2.5': [{ label: 'Maturity + Auto-Builder', href: '/governance-engine/auto-builder', reason: 'Improvement cycle' }],
   '3.0': [{ label: 'Clause Library', href: '/governance-engine/clause-library', reason: 'Clause risk governance' }, { label: 'Import Dataset', href: '/admin/compliance-registry', reason: 'ClauseMaster >= 20 entries' }],
@@ -90,7 +90,7 @@ const SECTION_ROUTES: Record<string, ImproveLink[]> = {
   '16.0': [{ label: 'Maturity + Audit', href: '/governance-engine/maturity', reason: 'Audit framework' }],
   '16.1': [{ label: 'Reports', href: '/governance-engine/reports', reason: 'Audit scope' }],
   '16.2': [{ label: 'Maturity', href: '/governance-engine/maturity', reason: 'KPI oversight' }],
-  '16.3': [{ label: 'Auto-Builder', href: '/governance-engine/auto-builder', reason: 'Corrective action' }],
+  '16.3': [{ label: 'Auto-Builder', href: '/governance-engine/auto-builder', reason: 'Corrective action' }, { label: 'Run Embeddings', href: '/admin/compliance-registry', reason: 'KB embedding coverage' }],
   '16.4': [{ label: 'Maturity', href: '/governance-engine/maturity', reason: 'Certification' }]
 };
 

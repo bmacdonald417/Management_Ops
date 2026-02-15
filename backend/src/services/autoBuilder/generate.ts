@@ -91,6 +91,13 @@ export function generateEvidenceMarkdown(ctx: AutoBuilderContext): string {
     lines.push(`| ${s.id} | ${s.title} | ${s.level} | ${Math.round(s.score0to1 * 100)}% | ${gaps} |`);
   }
 
+  if (ctx.kbStats && (ctx.kbStats.documentsCount > 0 || ctx.kbStats.chunksCount > 0)) {
+    lines.push('\n## Knowledge Base Status\n');
+    lines.push(`- **Documents:** ${ctx.kbStats.documentsCount}`);
+    lines.push(`- **Chunks:** ${ctx.kbStats.chunksCount}`);
+    lines.push(`- **Embedded:** ${ctx.kbStats.embeddedCount} (${Math.round(ctx.kbStats.embeddingCoverage * 100)}% coverage)\n`);
+  }
+
   lines.push('\n## Automation Disconnects\n');
   for (const d of m.disconnectIndicators) {
     lines.push(`- ⚠ ${d}`);

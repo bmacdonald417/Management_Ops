@@ -24,12 +24,23 @@ interface RegistryStats {
   costAccountExists: boolean;
 }
 
+interface KBStats {
+  documentsCount: number;
+  chunksCount: number;
+  embeddedCount: number;
+  embeddingCoverage: number;
+  hasEmbeddingSupport: boolean;
+}
+
 const CATEGORIES = ['FAR', 'DFARS', 'CMMC', 'NIST', 'ISO', 'INSURANCE', 'COST_ACCOUNT', 'INTERNAL'];
 
 export default function AdminComplianceRegistry() {
   const [sources, setSources] = useState<DataSource[]>([]);
   const [stats, setStats] = useState<RegistryStats | null>(null);
+  const [kbStats, setKbStats] = useState<KBStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [jobRunning, setJobRunning] = useState<string | null>(null);
+  const [embedLimit, setEmbedLimit] = useState(100);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [form, setForm] = useState({ category: 'FAR', version: '', name: '', effectiveDate: '' });
@@ -38,10 +49,12 @@ export default function AdminComplianceRegistry() {
   const load = () => {
     Promise.all([
       client.get('/admin/compliance-registry/sources'),
-      client.get('/admin/compliance-registry/stats')
-    ]).then(([r1, r2]) => {
+      client.get('/admin/compliance-registry/stats'),
+      client.get('/admin/compliance-registry/kb-stats')
+    ]).then(([r1, r2, r3]) => {
       setSources(r1.data);
       setStats(r2.data);
+      setKbStats(r3.data);
       setLoading(false);
     }).catch(() => setLoading(false));
   };
@@ -92,6 +105,19 @@ export default function AdminComplianceRegistry() {
     }
   };
 
+  const runJob = async (name: string, fn: () => Promise<unknown>) => {
+    setJobRunning(name);
+    try {
+      await fn();
+      load();
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      alert(err.response?.data?.error ?? `${name} failed`);
+    } finally {
+      setJobRunning(null);
+    }
+  };
+
   if (loading && !stats) return <div className="text-slate-500">Loading...</div>;
 
   return (
@@ -120,6 +146,65 @@ export default function AdminComplianceRegistry() {
             <div className={`text-2xl font-bold ${stats.costAccountExists ? 'text-green-600' : 'text-amber-600'}`}>
               {stats.costAccountCount}
             </div>
+          </div>
+          {kbStats && (
+            <>
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="text-sm text-slate-500">Documents</div>
+                <div className="text-2xl font-bold text-gov-navy">{kbStats.documentsCount}</div>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="text-sm text-slate-500">Chunks / Embedded</div>
+                <div className={`text-2xl font-bold ${kbStats.embeddingCoverage >= 0.8 ? 'text-green-600' : 'text-amber-600'}`}>
+                  {kbStats.chunksCount} / {kbStats.embeddedCount} ({Math.round(kbStats.embeddingCoverage * 100)}%)
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {kbStats && (
+        <div className="bg-white rounded-xl shadow p-6 mb-6">
+          <h2 className="font-display font-semibold text-lg text-gov-navy mb-4">Knowledge Base Pipeline</h2>
+          <div className="flex flex-wrap gap-3 items-center">
+            <button
+              onClick={() => runJob('Sync Documents', () => client.post('/admin/compliance-registry/sync-documents'))}
+              disabled={!!jobRunning}
+              className="px-4 py-2 bg-slate-200 rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              {jobRunning === 'Sync Documents' ? 'Running...' : 'Sync Documents'}
+            </button>
+            <button
+              onClick={() => runJob('Run Chunking', () => client.post('/admin/compliance-registry/run-chunking'))}
+              disabled={!!jobRunning}
+              className="px-4 py-2 bg-slate-200 rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              {jobRunning === 'Run Chunking' ? 'Running...' : 'Run Chunking'}
+            </button>
+            <button
+              onClick={() => runJob('Run Embeddings', () => client.post(`/admin/compliance-registry/run-embeddings?limit=${embedLimit}`))}
+              disabled={!!jobRunning || !kbStats.hasEmbeddingSupport}
+              className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              {jobRunning === 'Run Embeddings' ? 'Running...' : 'Run Embeddings'}
+            </button>
+            {kbStats.hasEmbeddingSupport && (
+              <label className="flex items-center gap-2">
+                <span className="text-sm text-slate-600">Limit:</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={embedLimit}
+                  onChange={(e) => setEmbedLimit(parseInt(e.target.value, 10) || 100)}
+                  className="w-20 px-2 py-1 border rounded text-sm"
+                />
+              </label>
+            )}
+            {!kbStats.hasEmbeddingSupport && (
+              <span className="text-sm text-amber-600">Set OPENAI_API_KEY for embeddings</span>
+            )}
           </div>
         </div>
       )}

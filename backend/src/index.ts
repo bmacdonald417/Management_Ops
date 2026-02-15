@@ -15,6 +15,7 @@ import dashboardRouter from './routes/dashboard.js';
 import authRouter from './routes/auth.js';
 import governanceRouter from './routes/governance.js';
 import adminRouter from './routes/admin.js';
+import complianceKBRouter from './routes/complianceKB.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/contracts', contractsRouter);
 app.use('/api/compliance', complianceRouter);
 app.use('/api/compliance', clauseLibraryRouter);
+app.use('/api/compliance', complianceKBRouter);
 app.use('/api/financials', financialsRouter);
 app.use('/api/risk', riskRouter);
 app.use('/api/cyber', cyberRouter);

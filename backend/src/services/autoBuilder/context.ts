@@ -1,6 +1,7 @@
 import { query } from '../../db/connection.js';
 import { computeGovernanceIndex, type MaturityResult } from '../governanceMaturity.js';
 import { getRegistryStats, type RegistryStats } from '../complianceRegistry/registryStats.js';
+import { getKBStats } from '../complianceKB/stats.js';
 
 export interface ClauseLibraryStats {
   total: number;
@@ -48,6 +49,7 @@ export interface AutoBuilderContext {
   auditStats: AuditStats;
   maturity: MaturityResult;
   registryStats: RegistryStats;
+  kbStats: { documentsCount: number; chunksCount: number; embeddedCount: number; embeddingCoverage: number };
 }
 
 const ZERO_CLS: ClauseLibraryStats = { total: 0, byType: {}, byCategory: {}, byRiskLevel: {}, flowDownCounts: {}, activeCounts: 0 };
@@ -62,6 +64,7 @@ export async function loadAutoBuilderContext(): Promise<AutoBuilderContext> {
   let activeRiskConfig: Record<string, unknown> = {};
   let clauseLibraryStats = ZERO_CLS;
   let registryStats = await getRegistryStats();
+  const kbStats = await getKBStats();
   let solicitationStats = ZERO_SOL;
   let clauseReviewStats = ZERO_CR;
   let approvalStats = ZERO_AP;
@@ -176,6 +179,7 @@ export async function loadAutoBuilderContext(): Promise<AutoBuilderContext> {
     approvalStats,
     auditStats,
     maturity,
-    registryStats
+    registryStats,
+    kbStats
   };
 }
