@@ -9,7 +9,8 @@ const navItems = [
   { path: '/governance-engine', label: 'Governance Engine' },
   { path: '/financials', label: 'Financials' },
   { path: '/cyber', label: 'Cyber' },
-  { path: '/admin/compliance-registry', label: 'Compliance Registry', roles: ['Level 1', 'Level 3'] }
+  { path: '/admin/compliance-registry', label: 'Compliance Registry', roles: ['Level 1', 'Level 3'] },
+  { path: '/admin/ai-settings', label: 'AI Settings', roles: ['Level 1', 'Level 3'] }
 ];
 
 const governanceSubNav = [
