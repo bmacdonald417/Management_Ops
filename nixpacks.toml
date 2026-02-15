@@ -15,13 +15,14 @@ cmds = [
 cmds = [
   "cd backend && npm run build",
   "cp backend/src/db/schema.sql backend/dist/db/",
+  "cp -r backend/src/db/migrations backend/dist/db/",
   "cd frontend && npm run build",
   "mkdir -p backend/public",
   "cp -r frontend/dist/* backend/public/"
 ]
 
 [start]
-cmd = "cd backend && node dist/index.js"
+cmd = "cd backend && node dist/scripts/prodBoot.js"
 
 [variables]
 NODE_ENV = "production"

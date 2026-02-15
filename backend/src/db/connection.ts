@@ -1,5 +1,10 @@
 import pg from 'pg';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+// Dotenv only for local dev; production uses Railway env vars (no .env required)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 const { Pool } = pg;
 

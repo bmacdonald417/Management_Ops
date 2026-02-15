@@ -51,6 +51,32 @@ function canFinalize(userRole: string): boolean {
   return ['Level 1', 'Level 2', 'Level 3'].includes(userRole);
 }
 
+const GOVERNANCE_STRICT_MODE = process.env.GOVERNANCE_STRICT_MODE === 'true' || process.env.GOVERNANCE_STRICT_MODE === '1';
+
+/** Normalize clause number for lookup (e.g. "FAR 52.203-13" -> "52.203-13") */
+function normalizeClauseForLookup(cn: string): string {
+  return cn.replace(/^(FAR|DFARS)\s*/i, '').replace(/\s+/g, '').trim();
+}
+
+/** When strict mode: require clause to exist in regulatory_clauses with risk_category, risk_score, flow_down_required */
+async function validateClauseForStrictMode(clauseNumber: string): Promise<{ ok: boolean; error?: string }> {
+  if (!GOVERNANCE_STRICT_MODE) return { ok: true };
+  const normalized = normalizeClauseForLookup(clauseNumber);
+  if (!normalized) return { ok: false, error: 'Invalid clause number' };
+  const r = (await query(
+    `SELECT risk_category, risk_score, flow_down_required FROM regulatory_clauses
+     WHERE clause_number = $1`,
+    [normalized]
+  )).rows[0] as { risk_category: string | null; risk_score: number | null; flow_down_required: boolean } | undefined;
+  if (!r) {
+    return { ok: false, error: `Clause ${clauseNumber} must be in Regulatory Library (run reg:ingest). Strict mode requires risk classification.` };
+  }
+  if (r.risk_category == null || r.risk_score == null) {
+    return { ok: false, error: `Clause ${clauseNumber} is missing risk classification (risk_category, risk_score). Re-run reg:ingest.` };
+  }
+  return { ok: true };
+}
+
 // Get risk model config
 router.get('/config', async (_req, res) => {
   const r = await query(
@@ -299,6 +325,9 @@ router.post(
       })
       .parse(req.body);
 
+    const strictCheck = await validateClauseForStrictMode(body.clause_number);
+    if (!strictCheck.ok) return res.status(400).json({ error: strictCheck.error });
+
     const fin = body.financial_dim ?? 2;
     const cyber = body.cyber_dim ?? 2;
     const liab = body.liability_dim ?? 2;
@@ -356,6 +385,10 @@ router.post(
     for (const cn of clauses) {
       const trimmed = cn.trim();
       if (!trimmed) continue;
+      const strictCheck = await validateClauseForStrictMode(trimmed);
+      if (!strictCheck.ok) {
+        return res.status(400).json({ error: strictCheck.error });
+      }
       const totalScore = computeClauseScore(2, 2, 2, 2, 2);
       const riskLevel = scoreToRiskLevel(totalScore);
       const has7012 = trimmed.includes('7012');

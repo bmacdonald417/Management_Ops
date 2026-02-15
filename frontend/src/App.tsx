@@ -22,6 +22,7 @@ import GovernanceAutoBuilderManual from './pages/GovernanceAutoBuilderManual';
 import GovernanceAutoBuilderEvidence from './pages/GovernanceAutoBuilderEvidence';
 import GovernanceAutoBuilderAppendices from './pages/GovernanceAutoBuilderAppendices';
 import AdminComplianceRegistry from './pages/AdminComplianceRegistry';
+import AdminRegulatoryLibrary from './pages/AdminRegulatoryLibrary';
 import AdminAISettings from './pages/AdminAISettings';
 import Login from './pages/Login';
 
@@ -64,6 +65,7 @@ function AppRoutes() {
         <Route path="governance-engine/auto-builder/appendices" element={<GovernanceAutoBuilderAppendices />} />
         <Route path="governance-engine/reports" element={<GovernanceReports />} />
         <Route path="admin/compliance-registry" element={<AdminComplianceRegistry />} />
+        <Route path="admin/regulatory-library" element={<AdminRegulatoryLibrary />} />
         <Route path="admin/ai-settings" element={<AdminAISettings />} />
         <Route path="financials" element={<Financials />} />
         <Route path="cyber" element={<Cyber />} />

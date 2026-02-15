@@ -10,6 +10,7 @@ const navItems = [
   { path: '/financials', label: 'Financials' },
   { path: '/cyber', label: 'Cyber' },
   { path: '/admin/compliance-registry', label: 'Compliance Registry', roles: ['Level 1', 'Level 3'] },
+  { path: '/admin/regulatory-library', label: 'Regulatory Library', roles: ['Level 1', 'Level 3'] },
   { path: '/admin/ai-settings', label: 'AI Settings', roles: ['Level 1', 'Level 3'] }
 ];
 
