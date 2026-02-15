@@ -14,7 +14,8 @@ export async function retrieveRelevantChunks(
 
   const vecStr = '[' + vec.join(',') + ']';
 
-  let sql = `
+  try {
+    let sql = `
     SELECT c.id as chunk_id, c.content, c.document_id,
            d.title, d.external_id, d.canonical_ref, d.source_url, d.doc_type,
            d.data_source_id, ds.category as ds_category,
@@ -24,39 +25,39 @@ export async function retrieveRelevantChunks(
     LEFT JOIN compliance_data_sources ds ON ds.id = d.data_source_id
     WHERE c.embedding IS NOT NULL AND d.is_active = true
   `;
-  const params: unknown[] = [vecStr];
-  let i = 2;
+    const params: unknown[] = [vecStr];
+    let i = 2;
 
-  if (filters.docType && filters.docType.length > 0) {
-    sql += ` AND d.doc_type = ANY($${i++})`;
-    params.push(filters.docType);
-  }
-  if (filters.category && filters.category.length > 0) {
-    sql += ` AND ds.category = ANY($${i++})`;
-    params.push(filters.category);
-  }
-  if (filters.externalIdPrefix) {
-    sql += ` AND (d.external_id LIKE $${i++} OR d.canonical_ref LIKE $${i})`;
-    params.push(filters.externalIdPrefix + '%', filters.externalIdPrefix + '%');
-    i++;
-  }
+    if (filters.docType && filters.docType.length > 0) {
+      sql += ` AND d.doc_type = ANY($${i++})`;
+      params.push(filters.docType);
+    }
+    if (filters.category && filters.category.length > 0) {
+      sql += ` AND ds.category = ANY($${i++})`;
+      params.push(filters.category);
+    }
+    if (filters.externalIdPrefix) {
+      sql += ` AND (d.external_id LIKE $${i++} OR d.canonical_ref LIKE $${i})`;
+      params.push(filters.externalIdPrefix + '%', filters.externalIdPrefix + '%');
+      i++;
+    }
 
-  sql += ` ORDER BY c.embedding <=> $1::vector LIMIT $${i}`;
-  params.push(topK);
+    sql += ` ORDER BY c.embedding <=> $1::vector LIMIT $${i}`;
+    params.push(topK);
 
-  const rows = (await query(sql, params)).rows as {
-    chunk_id: string;
-    content: string;
-    document_id: string;
-    title: string;
-    external_id?: string;
-    canonical_ref?: string;
-    source_url?: string;
-    doc_type: string;
-    similarity: number;
-  }[];
+    const rows = (await query(sql, params)).rows as {
+      chunk_id: string;
+      content: string;
+      document_id: string;
+      title: string;
+      external_id?: string;
+      canonical_ref?: string;
+      source_url?: string;
+      doc_type: string;
+      similarity: number;
+    }[];
 
-  return rows.map((r) => ({
+    return rows.map((r) => ({
     chunkId: r.chunk_id,
     content: r.content,
     documentId: r.document_id,
@@ -67,4 +68,7 @@ export async function retrieveRelevantChunks(
     similarity: Math.round(r.similarity * 1000) / 1000,
     docType: r.doc_type
   }));
+  } catch {
+    return [];
+  }
 }

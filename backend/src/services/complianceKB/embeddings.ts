@@ -50,10 +50,17 @@ export async function runEmbeddingJob(limit: number): Promise<{ processed: numbe
         continue;
       }
       const vecStr = '[' + vec.join(',') + ']';
-      await query(
-        `UPDATE compliance_chunks SET embedding = $2::vector, embedding_model = $3, embedded_at = NOW() WHERE id = $1`,
-        [ch.id, vecStr, EMBEDDING_MODEL]
-      );
+      try {
+        await query(
+          `UPDATE compliance_chunks SET embedding = $2::vector, embedding_model = $3, embedded_at = NOW() WHERE id = $1`,
+          [ch.id, vecStr, EMBEDDING_MODEL]
+        );
+      } catch {
+        await query(
+          `UPDATE compliance_chunks SET embedding = $2::jsonb, embedding_model = $3, embedded_at = NOW() WHERE id = $1`,
+          [ch.id, vecStr, EMBEDDING_MODEL]
+        );
+      }
       processed++;
     } catch (e) {
       console.error('Embedding error:', e);
