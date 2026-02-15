@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import client from '../api/client';
+import CopilotDrawer from '../components/governance/CopilotDrawer';
 import MaturityBanner from '../components/governance/MaturityBanner';
 import SectionCard from '../components/governance/SectionCard';
 
@@ -15,8 +17,11 @@ interface AutoBuilderData {
 }
 
 export default function GovernanceAutoBuilder() {
+  const { user } = useAuth();
   const [data, setData] = useState<AutoBuilderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [copilotSectionId, setCopilotSectionId] = useState<string>('');
 
   useEffect(() => {
     client.get('/governance/auto-builder/context').then((r) => {
@@ -44,6 +49,9 @@ export default function GovernanceAutoBuilder() {
       <div className="flex justify-between items-center mb-6 print:hidden">
         <h1 className="font-display font-bold text-2xl text-gov-navy">Auto-Builder</h1>
         <div className="flex gap-2">
+          <button onClick={() => { setCopilotSectionId(''); setCopilotOpen(true); }} className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium">
+            AI Copilot
+          </button>
           <Link to="/governance-engine/auto-builder/manual" className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium">
             Preview Manual
           </Link>
@@ -83,6 +91,7 @@ export default function GovernanceAutoBuilder() {
                   key={s.id}
                   id={s.id}
                   title={s.title}
+                  onCopilotClick={() => { setCopilotSectionId(s.id); setCopilotOpen(true); }}
                   level={s.eval.level}
                   score={Math.round(s.eval.score0to1 * 100)}
                   gaps={s.eval.gaps}
@@ -112,6 +121,13 @@ export default function GovernanceAutoBuilder() {
       <div className="mt-6 print:hidden">
         <Link to="/governance-engine" className="text-gov-blue hover:underline">← Back to Governance Engine</Link>
       </div>
+
+      <CopilotDrawer
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
+        context={{ sectionId: copilotSectionId }}
+        userRole={user?.role}
+      />
     </div>
   );
 }

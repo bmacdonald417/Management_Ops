@@ -18,6 +18,7 @@ const governanceSubNav = [
   { path: '/governance-engine/solicitations', label: 'Solicitations' },
   { path: '/governance-engine/clause-library', label: 'Clause Library' },
   { path: '/governance-engine/auto-builder', label: 'Auto-Builder' },
+  { path: '/governance-engine/copilot', label: 'Copilot' },
   { path: '/governance-engine/maturity', label: 'Maturity' },
   { path: '/governance-engine/reports', label: 'Reports' }
 ];

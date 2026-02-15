@@ -12,6 +12,8 @@ export interface MaturityMetrics {
   finalizedWithoutApproval: number;
   clausesNotFromLibrary: number;
   escalationsNoApproval: number;
+  executiveBriefCoverage: number;
+  copilotEnrichmentCount: number;
 }
 
 export interface MaturityResult {
@@ -41,7 +43,9 @@ export async function computeGovernanceIndex(): Promise<MaturityResult> {
     solicitationsWithoutClauseReview: 0,
     finalizedWithoutApproval: 0,
     clausesNotFromLibrary: 0,
-    escalationsNoApproval: 0
+    escalationsNoApproval: 0,
+    executiveBriefCoverage: 0,
+    copilotEnrichmentCount: 0
   };
 
   const disconnectIndicators: string[] = [];
@@ -159,6 +163,21 @@ export async function computeGovernanceIndex(): Promise<MaturityResult> {
       const pct = Math.round(kbStats.embeddingCoverage * 100);
       disconnectIndicators.push(`Knowledge base embedding coverage low (${pct}% - run embeddings)`);
     }
+
+    try {
+      const solsWithBrief = (await query(
+        `SELECT COUNT(DISTINCT (payload_json->>'solicitationId')) as c FROM copilot_runs WHERE mode = 'EXECUTIVE_BRIEF'`
+      )).rows[0] as { c: string };
+      const briefCount = parseInt(solsWithBrief?.c ?? '0', 10);
+      metrics.executiveBriefCoverage = totalSolicitations > 0 ? Math.min(1, briefCount / totalSolicitations) : 0;
+
+      const enrichCount = (await query(
+        `SELECT COUNT(*) as c FROM governance_audit_events WHERE entity_type = 'ClauseLibraryItem' AND new_value = 'clause_enrich'`
+      )).rows[0] as { c: string };
+      metrics.copilotEnrichmentCount = parseInt(enrichCount?.c ?? '0', 10);
+    } catch {
+      // copilot_runs table may not exist yet
+    }
   } catch (err) {
     console.error('Governance maturity compute error:', err);
     return buildResult(metrics, ['Error computing metrics'], []);
@@ -166,6 +185,7 @@ export async function computeGovernanceIndex(): Promise<MaturityResult> {
 
   const gapTable = [
     { metricName: 'Review Rate', currentPct: Math.round(metrics.reviewRate * 100), targetPct: TARGET, delta: Math.round(metrics.reviewRate * 100) - TARGET },
+    { metricName: 'Executive Brief Coverage', currentPct: Math.round(metrics.executiveBriefCoverage * 100), targetPct: 50, delta: Math.round(metrics.executiveBriefCoverage * 100) - 50 },
     { metricName: 'Approval Compliance', currentPct: Math.round(metrics.approvalCompliance * 100), targetPct: TARGET, delta: Math.round(metrics.approvalCompliance * 100) - TARGET },
     { metricName: 'Escalation Resolution', currentPct: Math.round(metrics.escalationResolutionRate * 100), targetPct: TARGET, delta: Math.round(metrics.escalationResolutionRate * 100) - TARGET },
     { metricName: 'Lock Integrity', currentPct: Math.round(metrics.lockIntegrity * 100), targetPct: TARGET, delta: Math.round(metrics.lockIntegrity * 100) - TARGET },

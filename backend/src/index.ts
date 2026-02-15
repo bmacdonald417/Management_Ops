@@ -17,6 +17,7 @@ import governanceRouter from './routes/governance.js';
 import adminRouter from './routes/admin.js';
 import complianceKBRouter from './routes/complianceKB.js';
 import aiRouter from './routes/ai.js';
+import copilotRouter from './routes/copilot.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -36,6 +37,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/governance', governanceRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/ai', aiRouter);
+app.use('/api/copilot', copilotRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'MacTech Governance Platform' });

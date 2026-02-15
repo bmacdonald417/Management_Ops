@@ -13,6 +13,7 @@ interface SectionCardProps {
   score: number;
   gaps: string[];
   improveLinks: ImproveLink[];
+  onCopilotClick?: () => void;
 }
 
 function scoreColor(pct: number): string {
@@ -21,7 +22,7 @@ function scoreColor(pct: number): string {
   return 'text-green-600 bg-green-50';
 }
 
-export default function SectionCard({ id, title, level, score, gaps, improveLinks }: SectionCardProps) {
+export default function SectionCard({ id, title, level, score, gaps, improveLinks, onCopilotClick }: SectionCardProps) {
   return (
     <div className="bg-white rounded-lg shadow p-4 border border-slate-100 hover:border-gov-blue/30 transition">
       <div className="flex justify-between items-start mb-2">
@@ -36,7 +37,12 @@ export default function SectionCard({ id, title, level, score, gaps, improveLink
           ))}
         </ul>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 items-center">
+        {onCopilotClick && (
+          <button onClick={onCopilotClick} className="text-sm text-gov-blue hover:underline">
+            AI Copilot →
+          </button>
+        )}
         {improveLinks.slice(0, 2).map((l, i) => (
           <Link key={i} to={l.href} className="text-sm text-gov-blue hover:underline">
             {l.label} →

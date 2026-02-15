@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import client from '../api/client';
+import CopilotDrawer from '../components/governance/CopilotDrawer';
 import RiskBadge from '../components/governance/RiskBadge';
 import EscalationPill from '../components/governance/EscalationPill';
 import Stepper from '../components/governance/Stepper';
@@ -114,11 +116,13 @@ function ApprovalRow({
 
 export default function GovernanceSolicitationReview() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [sol, setSol] = useState<Solicitation | null>(null);
   const [step, setStep] = useState(0);
   const [bulkClauses, setBulkClauses] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   const load = () => {
     client.get(`/governance/solicitations/${id}`).then((r) => {
@@ -195,11 +199,26 @@ export default function GovernanceSolicitationReview() {
           <p className="text-slate-500">{sol.title}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setCopilotOpen(true)} className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium">
+            AI Copilot
+          </button>
           <RiskBadge level={sol.overall_risk_level ?? 1} />
           <span className={`px-2 py-1 text-xs font-medium rounded ${sol.status === 'FINALIZED' ? 'bg-green-100' : 'bg-slate-100'}`}>{sol.status}</span>
           {sol.status === 'FINALIZED' && <span className="text-sm text-slate-500">Locked</span>}
         </div>
       </div>
+
+      <CopilotDrawer
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
+        context={{
+          solicitationId: id!,
+          clauseEntries: sol.clause_entries?.map((e) => ({ id: e.id, clause_number: e.clause_number })),
+          rawText: bulkClauses
+        }}
+        userRole={user?.role}
+        onApplyScoreAssist={() => { load(); setCopilotOpen(false); }}
+      />
 
       <Stepper steps={STEPS} current={step} />
       <div className="flex gap-2 mt-4 mb-6">
