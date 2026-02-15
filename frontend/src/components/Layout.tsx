@@ -8,7 +8,8 @@ const navItems = [
   { path: '/compliance', label: 'Compliance' },
   { path: '/governance-engine', label: 'Governance Engine' },
   { path: '/financials', label: 'Financials' },
-  { path: '/cyber', label: 'Cyber' }
+  { path: '/cyber', label: 'Cyber' },
+  { path: '/admin/compliance-registry', label: 'Compliance Registry', roles: ['Level 1', 'Level 3'] }
 ];
 
 const governanceSubNav = [
@@ -32,20 +33,22 @@ export default function Layout() {
             <div className="flex items-center gap-8">
               <h1 className="font-display font-bold text-xl">MacTech Governance</h1>
               <nav className="flex gap-1">
-                {navItems.map(({ path, label }) => {
-                  const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
-                  return (
-                    <Link
-                      key={path}
-                      to={path}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                        isActive ? 'bg-gov-blue text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
-                      }`}
-                    >
-                      {label}
-                    </Link>
-                  );
-                })}
+                {navItems
+                  .filter((item) => !item.roles || (user?.role && item.roles.includes(user.role)))
+                  .map(({ path, label }) => {
+                    const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
+                    return (
+                      <Link
+                        key={path}
+                        to={path}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                          isActive ? 'bg-gov-blue text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                        }`}
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
               </nav>
             </div>
             <div className="flex items-center gap-4">

@@ -1,0 +1,626 @@
+{
+  "projectInfo": {
+    "name": "mactech-governance-platform",
+    "version": "1.0.0",
+    "stack": {
+      "frontend": "React 18, Vite 5, React Router 6",
+      "backend": "Express 4, TypeScript 5",
+      "nodeVersion": "22.22.0",
+      "database": "PostgreSQL (raw pg driver, no ORM)"
+    },
+    "deploymentTarget": "Railway",
+    "environmentVariables": ["DATABASE_URL", "JWT_SECRET", "PORT", "ALLOW_DEV_TOKEN", "SAFE_MODE", "NODE_ENV"]
+  },
+  "databaseModels": [
+    {
+      "name": "users",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "auth_id", "type": "VARCHAR(255)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "email", "type": "VARCHAR(255)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "name", "type": "VARCHAR(255)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "role", "type": "VARCHAR(50)", "nullable": false, "default": "Level 5", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": [],
+      "enumsUsed": []
+    },
+    {
+      "name": "audit_logs",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "user_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "action", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "entity_type", "type": "VARCHAR(100)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "entity_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "payload", "type": "JSONB", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_audit_entity", "idx_audit_created", "idx_audit_user"],
+      "enumsUsed": []
+    },
+    {
+      "name": "contracts",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "title", "type": "VARCHAR(500)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "contract_number", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "agency", "type": "VARCHAR(255)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "naics_code", "type": "VARCHAR(20)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "contract_type", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "period_of_performance_start", "type": "DATE", "nullable": true, "default": "", "isComputed": false},
+        {"name": "period_of_performance_end", "type": "DATE", "nullable": true, "default": "", "isComputed": false},
+        {"name": "total_contract_value", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "funded_amount", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "status", "type": "VARCHAR(50)", "nullable": false, "default": "Opportunity", "isComputed": false},
+        {"name": "risk_profile_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "deleted_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_contracts_status", "idx_contracts_agency", "idx_contracts_deleted"],
+      "enumsUsed": []
+    },
+    {
+      "name": "risk_profiles",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "contract_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "strategic_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "financial_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "regulatory_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "cyber_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "operational_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "reputational_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "overall_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "status", "type": "VARCHAR(50)", "nullable": true, "default": "Draft", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_risk_profiles_contract"],
+      "enumsUsed": []
+    },
+    {
+      "name": "compliance_clauses",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "clause_number", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "title", "type": "TEXT", "nullable": false, "default": "", "isComputed": false},
+        {"name": "regulation", "type": "VARCHAR(20)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "full_text", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "full_text_url", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "risk_category", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "description", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "flow_down_required", "type": "BOOLEAN", "nullable": true, "default": "true", "isComputed": false},
+        {"name": "applicability_notes", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_clauses_regulation", "idx_clauses_risk_level", "idx_clauses_number"],
+      "enumsUsed": []
+    },
+    {
+      "name": "contract_clauses",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "contract_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "clause_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "compliance_status", "type": "VARCHAR(50)", "nullable": true, "default": "Not Started", "isComputed": false},
+        {"name": "notes", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "evidence_document_ids", "type": "UUID[]", "nullable": true, "default": "", "isComputed": false},
+        {"name": "last_reviewed_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "", "isComputed": false},
+        {"name": "reviewed_by", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_contract_clauses_contract", "idx_contract_clauses_status"],
+      "enumsUsed": []
+    },
+    {
+      "name": "cmmc_controls",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "control_identifier", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "domain", "type": "VARCHAR(100)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "level", "type": "VARCHAR(20)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "practice_statement", "type": "TEXT", "nullable": false, "default": "", "isComputed": false},
+        {"name": "objective", "type": "TEXT", "nullable": false, "default": "", "isComputed": false},
+        {"name": "discussion", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "evidence_examples", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "nist_800_171_mapping", "type": "VARCHAR(50)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "nist_800_53_mapping", "type": "VARCHAR(50)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_cmmc_domain", "idx_cmmc_level", "idx_cmmc_identifier"],
+      "enumsUsed": []
+    },
+    {
+      "name": "cmmc_assessments",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "contract_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "control_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "implementation_status", "type": "VARCHAR(50)", "nullable": true, "default": "Not Implemented", "isComputed": false},
+        {"name": "assessment_score", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "evidence_description", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "evidence_document_ids", "type": "UUID[]", "nullable": true, "default": "", "isComputed": false},
+        {"name": "assessor_notes", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "last_assessed_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "", "isComputed": false},
+        {"name": "assessed_by", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_cmmc_assessments_contract", "idx_cmmc_assessments_control"],
+      "enumsUsed": []
+    },
+    {
+      "name": "indirect_rates",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "rate_type", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "rate_value", "type": "DECIMAL(10,4)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "effective_date", "type": "DATE", "nullable": false, "default": "", "isComputed": false},
+        {"name": "quarter", "type": "VARCHAR(20)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_indirect_rates_type", "idx_indirect_rates_quarter"],
+      "enumsUsed": []
+    },
+    {
+      "name": "job_cost_logs",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "contract_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "direct_labor_cost", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "direct_material_cost", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "subcontractor_cost", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "other_direct_cost", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "fringe_burden", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "overhead_burden", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "ga_burden", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": false},
+        {"name": "total_cost", "type": "DECIMAL(18,2)", "nullable": true, "default": "0", "isComputed": true},
+        {"name": "log_date", "type": "DATE", "nullable": false, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_job_costs_contract", "idx_job_costs_date"],
+      "enumsUsed": []
+    },
+    {
+      "name": "documents",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "file_name", "type": "VARCHAR(500)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "file_type", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "s3_key", "type": "VARCHAR(500)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "version", "type": "INTEGER", "nullable": true, "default": "1", "isComputed": false},
+        {"name": "entity_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "entity_type", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_by", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_documents_entity"],
+      "enumsUsed": []
+    },
+    {
+      "name": "notifications",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "user_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "message", "type": "TEXT", "nullable": false, "default": "", "isComputed": false},
+        {"name": "type", "type": "VARCHAR(50)", "nullable": true, "default": "Information", "isComputed": false},
+        {"name": "is_read", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": false},
+        {"name": "link", "type": "VARCHAR(500)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_notifications_user", "idx_notifications_read"],
+      "enumsUsed": []
+    },
+    {
+      "name": "risk_escalations",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "risk_profile_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "description", "type": "TEXT", "nullable": false, "default": "", "isComputed": false},
+        {"name": "escalation_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_by", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_risk_escalations_profile"],
+      "enumsUsed": []
+    },
+    {
+      "name": "incident_reports",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "contract_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "incident_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "description", "type": "TEXT", "nullable": false, "default": "", "isComputed": false},
+        {"name": "status", "type": "VARCHAR(50)", "nullable": true, "default": "Investigating", "isComputed": false},
+        {"name": "reported_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "", "isComputed": false},
+        {"name": "discovered_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_incidents_status", "idx_incidents_contract"],
+      "enumsUsed": []
+    },
+    {
+      "name": "risk_model_config",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "config_key", "type": "VARCHAR(100)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "config_value", "type": "JSONB", "nullable": false, "default": "", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": [],
+      "enumsUsed": []
+    },
+    {
+      "name": "clause_library_items",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "clause_number", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "title", "type": "TEXT", "nullable": false, "default": "", "isComputed": false},
+        {"name": "type", "type": "VARCHAR(20)", "nullable": true, "default": "OTHER", "isComputed": false},
+        {"name": "category", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "default_financial", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "default_cyber", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "default_liability", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "default_regulatory", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "default_performance", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "suggested_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": false},
+        {"name": "flow_down", "type": "VARCHAR(20)", "nullable": true, "default": "CONDITIONAL", "isComputed": false},
+        {"name": "flow_down_notes", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "notes", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "active", "type": "BOOLEAN", "nullable": true, "default": "true", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_by", "type": "UUID", "nullable": true, "default": "", "isComputed": false}
+      ],
+      "indexes": ["idx_clause_library_number", "idx_clause_library_category", "idx_clause_library_type", "idx_clause_library_flow_down", "idx_clause_library_suggested_risk"],
+      "enumsUsed": []
+    },
+    {
+      "name": "solicitations",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "solicitation_number", "type": "VARCHAR(100)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "title", "type": "VARCHAR(500)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "agency", "type": "VARCHAR(255)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "naics_code", "type": "VARCHAR(20)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "contract_type", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "est_value", "type": "DECIMAL(18,2)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "cui_involved", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": false},
+        {"name": "cmmc_level", "type": "VARCHAR(20)", "nullable": true, "default": "None", "isComputed": false},
+        {"name": "set_aside_type", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "due_date", "type": "DATE", "nullable": true, "default": "", "isComputed": false},
+        {"name": "owner_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "current_version", "type": "INTEGER", "nullable": true, "default": "1", "isComputed": false},
+        {"name": "status", "type": "VARCHAR(50)", "nullable": false, "default": "DRAFT", "isComputed": false},
+        {"name": "overall_risk_score", "type": "DECIMAL(10,2)", "nullable": true, "default": "", "isComputed": true},
+        {"name": "overall_risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": true},
+        {"name": "escalation_required", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": true},
+        {"name": "executive_approval_required", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": true},
+        {"name": "quality_approval_required", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": true},
+        {"name": "financial_review_required", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": true},
+        {"name": "cyber_review_required", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": true},
+        {"name": "no_clauses_attestation", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": false},
+        {"name": "no_clauses_attested_by", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "no_clauses_attested_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "finalized_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "", "isComputed": false}
+      ],
+      "indexes": ["idx_solicitations_status", "idx_solicitations_owner", "idx_solicitations_agency"],
+      "enumsUsed": []
+    },
+    {
+      "name": "solicitation_versions",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "solicitation_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "version", "type": "INTEGER", "nullable": false, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_sol_versions_sol"],
+      "enumsUsed": []
+    },
+    {
+      "name": "clause_review_entries",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "solicitation_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "version_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "clause_number", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "clause_title", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "category", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "financial_dim", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "cyber_dim", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "liability_dim", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "regulatory_dim", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "performance_dim", "type": "INTEGER", "nullable": true, "default": "2", "isComputed": false},
+        {"name": "total_score", "type": "DECIMAL(10,2)", "nullable": true, "default": "", "isComputed": true},
+        {"name": "risk_level", "type": "INTEGER", "nullable": true, "default": "", "isComputed": true},
+        {"name": "escalation_trigger", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": true},
+        {"name": "escalation_reason", "type": "TEXT", "nullable": true, "default": "", "isComputed": true},
+        {"name": "not_applicable", "type": "BOOLEAN", "nullable": true, "default": "false", "isComputed": false},
+        {"name": "not_applicable_reason", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "not_applicable_approved_by", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "notes", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "review_evidence", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_clause_entries_sol", "idx_clause_entries_version"],
+      "enumsUsed": []
+    },
+    {
+      "name": "approvals",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "solicitation_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "approval_type", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "status", "type": "VARCHAR(50)", "nullable": false, "default": "Pending", "isComputed": false},
+        {"name": "approver_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "approved_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "", "isComputed": false},
+        {"name": "comment", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false},
+        {"name": "updated_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_approvals_sol"],
+      "enumsUsed": []
+    },
+    {
+      "name": "governance_audit_events",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "entity_type", "type": "VARCHAR(100)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "entity_id", "type": "UUID", "nullable": false, "default": "", "isComputed": false},
+        {"name": "action", "type": "VARCHAR(50)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "field_name", "type": "VARCHAR(100)", "nullable": true, "default": "", "isComputed": false},
+        {"name": "old_value", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "new_value", "type": "TEXT", "nullable": true, "default": "", "isComputed": false},
+        {"name": "actor_id", "type": "UUID", "nullable": true, "default": "", "isComputed": false},
+        {"name": "created_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_gov_audit_entity", "idx_gov_audit_created"],
+      "enumsUsed": []
+    },
+    {
+      "name": "governance_metric_snapshots",
+      "fields": [
+        {"name": "id", "type": "UUID", "nullable": false, "default": "gen_random_uuid()", "isComputed": false},
+        {"name": "overall_score", "type": "DECIMAL(5,2)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "pillar_contract", "type": "DECIMAL(5,2)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "pillar_financial", "type": "DECIMAL(5,2)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "pillar_cyber", "type": "DECIMAL(5,2)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "pillar_insurance", "type": "DECIMAL(5,2)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "pillar_structural", "type": "DECIMAL(5,2)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "pillar_audit", "type": "DECIMAL(5,2)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "pillar_documentation", "type": "DECIMAL(5,2)", "nullable": false, "default": "", "isComputed": false},
+        {"name": "computed_at", "type": "TIMESTAMPTZ", "nullable": true, "default": "NOW()", "isComputed": false}
+      ],
+      "indexes": ["idx_gov_metric_snapshots_computed"],
+      "enumsUsed": []
+    }
+  ],
+  "relationships": [
+    {"fromModel": "audit_logs", "toModel": "users", "type": "many-to-one", "fieldName": "user_id"},
+    {"fromModel": "risk_profiles", "toModel": "contracts", "type": "many-to-one", "fieldName": "contract_id"},
+    {"fromModel": "contracts", "toModel": "risk_profiles", "type": "one-to-many", "fieldName": "risk_profile_id"},
+    {"fromModel": "contract_clauses", "toModel": "contracts", "type": "many-to-one", "fieldName": "contract_id"},
+    {"fromModel": "contract_clauses", "toModel": "compliance_clauses", "type": "many-to-one", "fieldName": "clause_id"},
+    {"fromModel": "contract_clauses", "toModel": "users", "type": "many-to-one", "fieldName": "reviewed_by"},
+    {"fromModel": "cmmc_assessments", "toModel": "contracts", "type": "many-to-one", "fieldName": "contract_id"},
+    {"fromModel": "cmmc_assessments", "toModel": "cmmc_controls", "type": "many-to-one", "fieldName": "control_id"},
+    {"fromModel": "cmmc_assessments", "toModel": "users", "type": "many-to-one", "fieldName": "assessed_by"},
+    {"fromModel": "job_cost_logs", "toModel": "contracts", "type": "many-to-one", "fieldName": "contract_id"},
+    {"fromModel": "documents", "toModel": "users", "type": "many-to-one", "fieldName": "created_by"},
+    {"fromModel": "notifications", "toModel": "users", "type": "many-to-one", "fieldName": "user_id"},
+    {"fromModel": "risk_escalations", "toModel": "risk_profiles", "type": "many-to-one", "fieldName": "risk_profile_id"},
+    {"fromModel": "risk_escalations", "toModel": "users", "type": "many-to-one", "fieldName": "created_by"},
+    {"fromModel": "incident_reports", "toModel": "contracts", "type": "many-to-one", "fieldName": "contract_id"},
+    {"fromModel": "clause_library_items", "toModel": "users", "type": "many-to-one", "fieldName": "updated_by"},
+    {"fromModel": "solicitations", "toModel": "users", "type": "many-to-one", "fieldName": "owner_id"},
+    {"fromModel": "solicitations", "toModel": "users", "type": "many-to-one", "fieldName": "no_clauses_attested_by"},
+    {"fromModel": "solicitation_versions", "toModel": "solicitations", "type": "many-to-one", "fieldName": "solicitation_id"},
+    {"fromModel": "clause_review_entries", "toModel": "solicitations", "type": "many-to-one", "fieldName": "solicitation_id"},
+    {"fromModel": "clause_review_entries", "toModel": "solicitation_versions", "type": "many-to-one", "fieldName": "version_id"},
+    {"fromModel": "approvals", "toModel": "solicitations", "type": "many-to-one", "fieldName": "solicitation_id"},
+    {"fromModel": "approvals", "toModel": "users", "type": "many-to-one", "fieldName": "approver_id"},
+    {"fromModel": "governance_audit_events", "toModel": "users", "type": "many-to-one", "fieldName": "actor_id"}
+  ],
+  "routes": [
+    {"path": "/", "purpose": "Dashboard", "serverComponent": false, "usesModels": ["contracts", "risk_profiles", "contract_clauses", "incident_reports"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/contracts", "purpose": "Contract list", "serverComponent": false, "usesModels": ["contracts", "risk_profiles"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/contracts/:id", "purpose": "Contract detail", "serverComponent": false, "usesModels": ["contracts", "risk_profiles", "contract_clauses", "job_cost_logs"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/compliance", "purpose": "Clause library / compliance", "serverComponent": false, "usesModels": ["compliance_clauses", "contract_clauses", "clause_library_items"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/financials", "purpose": "Indirect rates and job costs", "serverComponent": false, "usesModels": ["indirect_rates", "job_cost_logs"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/cyber", "purpose": "CMMC controls and incident reports", "serverComponent": false, "usesModels": ["cmmc_controls", "cmmc_assessments", "incident_reports"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine", "purpose": "Pre-bid dashboard", "serverComponent": false, "usesModels": ["solicitations"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/solicitations", "purpose": "Solicitation list", "serverComponent": false, "usesModels": ["solicitations"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/solicitations/new", "purpose": "Create solicitation", "serverComponent": false, "usesModels": ["solicitations", "solicitation_versions"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/solicitations/:id", "purpose": "Solicitation review", "serverComponent": false, "usesModels": ["solicitations", "solicitation_versions", "clause_review_entries", "approvals"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/solicitations/:id/review", "purpose": "Solicitation review (alias)", "serverComponent": false, "usesModels": ["solicitations", "clause_review_entries", "approvals"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/solicitations/:id/audit", "purpose": "Audit trail", "serverComponent": false, "usesModels": ["governance_audit_events"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/solicitations/:id/export", "purpose": "Pre-bid packet export", "serverComponent": false, "usesModels": ["solicitations", "clause_review_entries", "approvals"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/clause-library", "purpose": "Governance clause library", "serverComponent": false, "usesModels": ["clause_library_items"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/maturity", "purpose": "Governance Completeness Index", "serverComponent": false, "usesModels": ["solicitations", "approvals", "clause_review_entries", "governance_audit_events"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/auto-builder", "purpose": "Auto-Builder dashboard", "serverComponent": false, "usesModels": ["solicitations", "clause_library_items", "clause_review_entries", "approvals", "governance_audit_events"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/auto-builder/manual", "purpose": "Manual preview", "serverComponent": false, "usesModels": [], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/auto-builder/evidence", "purpose": "Evidence packet preview", "serverComponent": false, "usesModels": [], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/auto-builder/appendices", "purpose": "Appendices list", "serverComponent": false, "usesModels": ["clause_library_items"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/governance-engine/reports", "purpose": "Governance reports", "serverComponent": false, "usesModels": ["solicitations"], "requiresAuth": true, "rolesAllowed": []},
+    {"path": "/login", "purpose": "Login", "serverComponent": false, "usesModels": ["users"], "requiresAuth": false, "rolesAllowed": []}
+  ],
+  "serverActions": [
+    {"name": "POST /api/auth/login", "file": "backend/src/routes/auth.ts", "modelsTouched": ["users"], "validations": ["email required"], "writesAuditLog": false, "enforcesRBAC": false},
+    {"name": "POST /api/auth/dev-token", "file": "backend/src/routes/auth.ts", "modelsTouched": ["users"], "validations": ["NODE_ENV production blocks unless ALLOW_DEV_TOKEN"], "writesAuditLog": false, "enforcesRBAC": false},
+    {"name": "GET /api/contracts", "file": "backend/src/routes/contracts.ts", "modelsTouched": ["contracts", "risk_profiles"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/contracts", "file": "backend/src/routes/contracts.ts", "modelsTouched": ["contracts"], "validations": ["ContractSchema zod"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "PUT /api/contracts/:id", "file": "backend/src/routes/contracts.ts", "modelsTouched": ["contracts"], "validations": ["ContractSchema.partial zod"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "DELETE /api/contracts/:id", "file": "backend/src/routes/contracts.ts", "modelsTouched": ["contracts"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "POST /api/contracts/:id/phases", "file": "backend/src/routes/contracts.ts", "modelsTouched": ["contracts"], "validations": ["phase zod"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/compliance/contracts/:contractId/clauses", "file": "backend/src/routes/compliance.ts", "modelsTouched": ["compliance_clauses", "contract_clauses"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/compliance/contracts/:contractId/clauses", "file": "backend/src/routes/compliance.ts", "modelsTouched": ["contract_clauses"], "validations": ["clause_id zod"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "PUT /api/compliance/contracts/:contractId/clauses/:linkId", "file": "backend/src/routes/compliance.ts", "modelsTouched": ["contract_clauses"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/compliance/library", "file": "backend/src/routes/clauseLibrary.ts", "modelsTouched": ["clause_library_items"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/compliance/library", "file": "backend/src/routes/clauseLibrary.ts", "modelsTouched": ["clause_library_items"], "validations": ["zod clause schema"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "PUT /api/compliance/library/:id", "file": "backend/src/routes/clauseLibrary.ts", "modelsTouched": ["clause_library_items"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "POST /api/compliance/library/seed", "file": "backend/src/routes/clauseLibrary.ts", "modelsTouched": ["clause_library_items"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/governance/dashboard", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/governance/solicitations", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/governance/solicitations", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations", "solicitation_versions"], "validations": ["zod solicitation schema"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "PUT /api/governance/solicitations/:id", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "POST /api/governance/solicitations/:id/clauses", "file": "backend/src/routes/governance.ts", "modelsTouched": ["clause_review_entries", "solicitations"], "validations": ["zod clause body"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "POST /api/governance/solicitations/:id/clauses/bulk", "file": "backend/src/routes/governance.ts", "modelsTouched": ["clause_review_entries", "solicitations"], "validations": ["clauses array zod"], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "PUT /api/governance/solicitations/:id/clauses/:clauseId", "file": "backend/src/routes/governance.ts", "modelsTouched": ["clause_review_entries", "solicitations"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/governance/solicitations/:id/submit", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations", "approvals"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "POST /api/governance/solicitations/:id/approve", "file": "backend/src/routes/governance.ts", "modelsTouched": ["approvals", "solicitations"], "validations": ["approval_type status comment zod"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "POST /api/governance/solicitations/:id/finalize", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/governance/solicitations/:id/audit", "file": "backend/src/routes/governance.ts", "modelsTouched": ["governance_audit_events"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/governance/clause-library", "file": "backend/src/routes/governance.ts", "modelsTouched": ["clause_library_items"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/governance/clause-library", "file": "backend/src/routes/governance.ts", "modelsTouched": ["clause_library_items"], "validations": ["zod clause schema"], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/governance/maturity", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations", "approvals", "clause_review_entries", "governance_audit_events", "governance_metric_snapshots"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/governance/auto-builder/context", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations", "clause_library_items", "clause_review_entries", "approvals", "governance_audit_events"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/governance/auto-builder/manual", "file": "backend/src/routes/governance.ts", "modelsTouched": [], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/governance/auto-builder/evidence", "file": "backend/src/routes/governance.ts", "modelsTouched": [], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/governance/auto-builder/appendices", "file": "backend/src/routes/governance.ts", "modelsTouched": ["clause_library_items"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/governance/reports", "file": "backend/src/routes/governance.ts", "modelsTouched": ["solicitations"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/financials/rates", "file": "backend/src/routes/financials.ts", "modelsTouched": ["indirect_rates"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/financials/rates", "file": "backend/src/routes/financials.ts", "modelsTouched": ["indirect_rates"], "validations": ["zod rate schema"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/financials/contracts/:contractId/costs", "file": "backend/src/routes/financials.ts", "modelsTouched": ["job_cost_logs"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/financials/contracts/:contractId/costs", "file": "backend/src/routes/financials.ts", "modelsTouched": ["job_cost_logs"], "validations": ["zod cost schema"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/cyber/cmmc/controls", "file": "backend/src/routes/cyber.ts", "modelsTouched": ["cmmc_controls"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "PUT /api/cyber/contracts/:contractId/cmmc/:controlId", "file": "backend/src/routes/cyber.ts", "modelsTouched": ["cmmc_assessments"], "validations": ["zod assessment schema"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/cyber/incidents", "file": "backend/src/routes/cyber.ts", "modelsTouched": ["incident_reports"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/cyber/incidents", "file": "backend/src/routes/cyber.ts", "modelsTouched": ["incident_reports"], "validations": ["zod incident schema"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "PUT /api/cyber/incidents/:id", "file": "backend/src/routes/cyber.ts", "modelsTouched": ["incident_reports"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/risk/profiles/:id", "file": "backend/src/routes/risk.ts", "modelsTouched": ["risk_profiles"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "POST /api/risk/profiles", "file": "backend/src/routes/risk.ts", "modelsTouched": ["risk_profiles", "contracts"], "validations": ["zod profile schema"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "PUT /api/risk/profiles/:id", "file": "backend/src/routes/risk.ts", "modelsTouched": ["risk_profiles"], "validations": [], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "POST /api/risk/escalations", "file": "backend/src/routes/risk.ts", "modelsTouched": ["risk_escalations"], "validations": ["zod escalation schema"], "writesAuditLog": true, "enforcesRBAC": true},
+    {"name": "GET /api/dashboard/kpis", "file": "backend/src/routes/dashboard.ts", "modelsTouched": ["contracts", "risk_profiles", "contract_clauses", "incident_reports"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "GET /api/users", "file": "backend/src/routes/users.ts", "modelsTouched": ["users"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true},
+    {"name": "PUT /api/users/:id", "file": "backend/src/routes/users.ts", "modelsTouched": ["users"], "validations": [], "writesAuditLog": false, "enforcesRBAC": true}
+  ],
+  "rbac": {
+    "roles": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"],
+    "permissionsMatrix": {
+      "contracts": {"create": ["Level 1", "Level 2", "Level 3", "Level 4"], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": ["Level 1", "Level 2", "Level 3", "Level 4"], "delete": ["Level 1", "Level 2"]},
+      "solicitations": {"create": ["Level 1", "Level 2", "Level 3", "Level 4"], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": ["Level 1", "Level 2", "Level 3", "Level 4 (owner only)"], "delete": []},
+      "clause_library_items": {"create": ["Level 1", "Level 2", "Level 3"], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": ["Level 1", "Level 2", "Level 3"], "delete": []},
+      "approvals": {"create": [], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": ["Level 1", "Level 2", "Level 3"], "delete": []},
+      "users": {"create": [], "read": ["Level 1", "Level 2", "Level 5 (self)"], "update": ["Level 1"], "delete": []},
+      "indirect_rates": {"create": ["Level 1", "Level 2"], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": [], "delete": []},
+      "job_cost_logs": {"create": ["Level 1", "Level 2", "Level 3", "Level 4"], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": [], "delete": []},
+      "risk_profiles": {"create": ["Level 1", "Level 2", "Level 3"], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": ["Level 1", "Level 2", "Level 3"], "delete": []},
+      "cmmc_assessments": {"create": [], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": ["Level 1", "Level 2", "Level 3"], "delete": []},
+      "incident_reports": {"create": ["Level 1", "Level 2", "Level 3"], "read": ["Level 1", "Level 2", "Level 3", "Level 4", "Level 5"], "update": ["Level 1", "Level 2", "Level 3"], "delete": []}
+    }
+  },
+  "workflowEngines": [
+    {
+      "name": "Solicitation Lifecycle",
+      "states": ["DRAFT", "AWAITING_APPROVALS", "FINALIZED"],
+      "transitions": [
+        {"from": "DRAFT", "to": "AWAITING_APPROVALS", "trigger": "submit", "roles": ["Level 1", "Level 2", "Level 3", "Level 4"]},
+        {"from": "AWAITING_APPROVALS", "to": "DRAFT", "trigger": "rejection", "roles": ["Level 1", "Level 2", "Level 3"]},
+        {"from": "AWAITING_APPROVALS", "to": "FINALIZED", "trigger": "finalize", "roles": ["Level 1", "Level 2", "Level 3"]}
+      ],
+      "gatingConditions": [
+        "Must have clause entries or no_clauses_attestation",
+        "All required approvals must be Approved",
+        "No rejected approvals"
+      ],
+      "modelsInvolved": ["solicitations", "solicitation_versions", "clause_review_entries", "approvals"]
+    },
+    {
+      "name": "Approval Gating",
+      "states": ["Pending", "Approved", "Rejected"],
+      "transitions": [
+        {"from": "Pending", "to": "Approved", "trigger": "approve", "roles": ["Level 1", "Level 2", "Level 3"]},
+        {"from": "Pending", "to": "Rejected", "trigger": "reject", "roles": ["Level 1", "Level 2", "Level 3"]}
+      ],
+      "gatingConditions": [
+        "Approval types: Executive, Quality, Financial, Cyber (driven by escalation flags)",
+        "All Pending must become Approved for finalize"
+      ],
+      "modelsInvolved": ["approvals", "solicitations"]
+    },
+    {
+      "name": "Finalization Lock",
+      "states": ["editable", "locked"],
+      "transitions": [
+        {"from": "editable", "to": "locked", "trigger": "finalize", "roles": ["Level 1", "Level 2", "Level 3"]}
+      ],
+      "gatingConditions": [
+        "status = FINALIZED blocks PUT on solicitation, add/update clause entries"
+      ],
+      "modelsInvolved": ["solicitations"]
+    },
+    {
+      "name": "Escalation Triggers",
+      "states": ["no_escalation", "escalation_required"],
+      "transitions": [],
+      "gatingConditions": [
+        "L4 clause count > 0 -> executive_approval_required",
+        "L3 clause count >= 3 -> escalation_required",
+        "Cost-Reimbursable + overall L3+ -> escalation_required",
+        "CUI or DFARS 7012 -> cyber_review_required",
+        "Indemnification L3+ -> escalation_required",
+        "Audit clause + non-FFP -> financial_review_required",
+        "L3/L4 count > 0 -> quality_approval_required"
+      ],
+      "modelsInvolved": ["solicitations", "clause_review_entries"]
+    }
+  ],
+  "computedFields": [
+    {"model": "clause_review_entries", "field": "total_score", "computedFrom": ["financial_dim", "cyber_dim", "liability_dim", "regulatory_dim", "performance_dim"], "locationOfLogic": "backend/src/services/governanceScoring.ts computeClauseScore"},
+    {"model": "clause_review_entries", "field": "risk_level", "computedFrom": ["total_score"], "locationOfLogic": "backend/src/services/governanceScoring.ts scoreToRiskLevel"},
+    {"model": "clause_review_entries", "field": "escalation_trigger", "computedFrom": ["risk_level", "category", "clause_number"], "locationOfLogic": "backend/src/services/governanceScoring.ts checkClauseEscalation"},
+    {"model": "clause_review_entries", "field": "escalation_reason", "computedFrom": ["risk_level", "category", "clause_number"], "locationOfLogic": "backend/src/services/governanceScoring.ts checkClauseEscalation"},
+    {"model": "solicitations", "field": "overall_risk_score", "computedFrom": ["clause_review_entries"], "locationOfLogic": "backend/src/routes/governance.ts recomputeSolicitationRisk -> computeSolicitationRisk"},
+    {"model": "solicitations", "field": "overall_risk_level", "computedFrom": ["clause_review_entries"], "locationOfLogic": "backend/src/routes/governance.ts recomputeSolicitationRisk -> computeSolicitationRisk"},
+    {"model": "solicitations", "field": "escalation_required", "computedFrom": ["clause_review_entries", "contract_type", "cui_involved"], "locationOfLogic": "backend/src/routes/governance.ts recomputeSolicitationRisk -> checkSolicitationEscalations"},
+    {"model": "solicitations", "field": "executive_approval_required", "computedFrom": ["clause_review_entries"], "locationOfLogic": "backend/src/routes/governance.ts recomputeSolicitationRisk -> checkSolicitationEscalations"},
+    {"model": "solicitations", "field": "quality_approval_required", "computedFrom": ["clause_review_entries"], "locationOfLogic": "backend/src/routes/governance.ts recomputeSolicitationRisk -> checkSolicitationEscalations"},
+    {"model": "solicitations", "field": "financial_review_required", "computedFrom": ["clause_review_entries", "contract_type"], "locationOfLogic": "backend/src/routes/governance.ts recomputeSolicitationRisk -> checkSolicitationEscalations"},
+    {"model": "solicitations", "field": "cyber_review_required", "computedFrom": ["cui_involved", "clause_review_entries"], "locationOfLogic": "backend/src/routes/governance.ts recomputeSolicitationRisk -> checkSolicitationEscalations"},
+    {"model": "job_cost_logs", "field": "total_cost", "computedFrom": ["direct_labor_cost", "direct_material_cost", "subcontractor_cost", "other_direct_cost", "fringe_burden", "overhead_burden", "ga_burden"], "locationOfLogic": "backend/src/routes/financials.ts POST costs"}
+  ],
+  "automationRules": [
+    {"ruleName": "Clause risk scoring", "trigger": "Clause add/update", "condition": "Clause dimensions 1-5 provided", "action": "Compute total_score, risk_level, escalation_trigger, escalation_reason", "modelsAffected": ["clause_review_entries"]},
+    {"ruleName": "Solicitation risk recompute", "trigger": "Clause add/update/delete", "condition": "Version has clause_review_entries", "action": "Recompute overall_risk_score, overall_risk_level, escalation flags", "modelsAffected": ["solicitations"]},
+    {"ruleName": "Approval type gating", "trigger": "Submit for approval", "condition": "solicitation status DRAFT", "action": "Create approvals for Executive/Quality/Financial/Cyber based on escalation flags", "modelsAffected": ["approvals"]},
+    {"ruleName": "Finalization lock", "trigger": "Finalize", "condition": "All approvals Approved", "action": "Set status FINALIZED, finalized_at", "modelsAffected": ["solicitations"]},
+    {"ruleName": "DFARS 7012 escalation", "trigger": "Clause contains 7012", "condition": "clause_number includes 7012", "action": "Set escalation_trigger true, cyber_review_required", "modelsAffected": ["clause_review_entries", "solicitations"]},
+    {"ruleName": "Indemnification L3 escalation", "trigger": "Clause category Indemnification and risk_level >= 3", "condition": "category=Indemnification AND risk_level>=3", "action": "Set escalation_required", "modelsAffected": ["solicitations"]}
+  ],
+  "auditIntegration": {
+    "auditModelName": "audit_logs, governance_audit_events",
+    "entitiesLogged": ["Contract", "ContractClause", "RiskProfile", "RiskEscalation", "CMMCAssessment", "IncidentReport", "IndirectRate", "JobCostLog", "Solicitation", "ClauseEntry", "ClauseLibrary"],
+    "eventsTracked": ["CREATE", "UPDATE", "DELETE", "PHASE_CHANGE", "created", "updated", "submitted", "approval_approved", "approval_rejected", "finalized"],
+    "writeLocations": ["backend/src/middleware/audit.ts auditLog", "backend/src/routes/governance.ts logAudit", "backend/src/routes/clauseLibrary.ts logAudit"]
+  },
+  "exports": [
+    {"name": "Pre-Bid Governance Packet", "type": "Print view", "route": "/governance-engine/solicitations/:id/export", "method": "window.print()"},
+    {"name": "Manual preview", "type": "Markdown rendered + print", "route": "/governance-engine/auto-builder/manual", "method": "window.print()"},
+    {"name": "Evidence Packet", "type": "Markdown rendered + print", "route": "/governance-engine/auto-builder/evidence", "method": "window.print()"},
+    {"name": "Maturity Report", "type": "Print view", "route": "/governance-engine/maturity", "method": "window.print()"},
+    {"name": "Auto-Builder manual markdown", "type": "API", "route": "GET /api/governance/auto-builder/manual", "method": "generateManualMarkdown"},
+    {"name": "Auto-Builder evidence markdown", "type": "API", "route": "GET /api/governance/auto-builder/evidence", "method": "generateEvidenceMarkdown"}
+  ],
+  "externalIntegrations": [],
+  "environment": {
+    "NODE_ENV": "development | production; production blocks dev-token unless ALLOW_DEV_TOKEN=1",
+    "migrationRunner": "tsx src/db/migrate.ts (dev) or node dist/db/migrate.js (prod); runs on start",
+    "safeMode": "SAFE_MODE=true skips migrations",
+    "startupSequence": "Run migrate -> Start Express server; migrations run before app.listen"
+  }
+}

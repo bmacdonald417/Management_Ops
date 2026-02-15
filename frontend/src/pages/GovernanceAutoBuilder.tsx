@@ -5,7 +5,10 @@ import MaturityBanner from '../components/governance/MaturityBanner';
 import SectionCard from '../components/governance/SectionCard';
 
 interface AutoBuilderData {
-  context: { maturity: { overallScore: number; pillarContract: number; pillarFinancial: number; pillarCyber: number; pillarInsurance: number; pillarStructural: number; pillarAudit: number; pillarDocumentation: number; disconnectIndicators: string[] } };
+  context: {
+    maturity: { overallScore: number; pillarContract: number; pillarFinancial: number; pillarCyber: number; pillarInsurance: number; pillarStructural: number; pillarAudit: number; pillarDocumentation: number; disconnectIndicators: string[] };
+    registryStats?: { clauseMasterMeetsThreshold: boolean; cyberControlMeetsThreshold: boolean; costAccountExists: boolean };
+  };
   dci: number;
   weakest: { id: string; title: string; eval: { level: string; score0to1: number; gaps: string[] }; improveLinks: { label: string; href: string; reason: string }[] }[];
   disconnectIndicators: string[];
@@ -54,6 +57,19 @@ export default function GovernanceAutoBuilder() {
       </div>
 
       <MaturityBanner gci={m.overallScore} dci={data.dci} pillars={pillars} />
+
+      {data.context?.registryStats && (
+        !data.context.registryStats.clauseMasterMeetsThreshold ||
+        !data.context.registryStats.cyberControlMeetsThreshold ||
+        !data.context.registryStats.costAccountExists
+      ) ? (
+        <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+          <span className="text-amber-800">Some reference datasets are missing. Import via Compliance Registry to improve section maturity.</span>
+          <Link to="/admin/compliance-registry" className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium">
+            Import Dataset
+          </Link>
+        </div>
+      ) : null}
 
       <div className="grid md:grid-cols-2 gap-6 mt-6">
         <div className="bg-white rounded-xl shadow p-6">

@@ -20,6 +20,7 @@ import GovernanceAutoBuilder from './pages/GovernanceAutoBuilder';
 import GovernanceAutoBuilderManual from './pages/GovernanceAutoBuilderManual';
 import GovernanceAutoBuilderEvidence from './pages/GovernanceAutoBuilderEvidence';
 import GovernanceAutoBuilderAppendices from './pages/GovernanceAutoBuilderAppendices';
+import AdminComplianceRegistry from './pages/AdminComplianceRegistry';
 import Login from './pages/Login';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="governance-engine/auto-builder/evidence" element={<GovernanceAutoBuilderEvidence />} />
         <Route path="governance-engine/auto-builder/appendices" element={<GovernanceAutoBuilderAppendices />} />
         <Route path="governance-engine/reports" element={<GovernanceReports />} />
+        <Route path="admin/compliance-registry" element={<AdminComplianceRegistry />} />
         <Route path="financials" element={<Financials />} />
         <Route path="cyber" element={<Cyber />} />
       </Route>

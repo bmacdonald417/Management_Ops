@@ -64,6 +64,28 @@ function evalSection(ctx: AutoBuilderContext, pillars: string[], built: boolean)
   };
 }
 
+function evalSectionWithRegistry(ctx: AutoBuilderContext, sectionId: string, pillars: string[], built: boolean, registryCheck: 'clause' | 'cyber' | 'cost' | null): SectionEval {
+  const base = evalSection(ctx, pillars, built);
+  const rs = ctx.registryStats;
+  if (!rs) return base;
+  if (registryCheck === 'clause' && !rs.clauseMasterMeetsThreshold) {
+    base.gaps.push('Import ClauseMaster dataset (>=20 entries) via Compliance Registry');
+    base.evidenceRefs.push('Import Dataset → /admin/compliance-registry');
+    if (base.level !== 'PLANNED') base.score0to1 = Math.min(base.score0to1, 0.4);
+  }
+  if (registryCheck === 'cyber' && !rs.cyberControlMeetsThreshold) {
+    base.gaps.push('Import CyberControlMaster dataset (>=110 entries) via Compliance Registry');
+    base.evidenceRefs.push('Import Dataset → /admin/compliance-registry');
+    if (base.level !== 'PLANNED') base.score0to1 = Math.min(base.score0to1, 0.4);
+  }
+  if (registryCheck === 'cost' && !rs.costAccountExists) {
+    base.gaps.push('Import CostAccount dataset via Compliance Registry');
+    base.evidenceRefs.push('Import Dataset → /admin/compliance-registry');
+    if (base.level !== 'PLANNED') base.score0to1 = Math.min(base.score0to1, 0.4);
+  }
+  return base;
+}
+
 const BUILT_PARTS = ['1', '2', '3', '4', '5', '6', '8'];
 const BUILT_CYBER = false;
 const BUILT_FINANCIAL = true;
@@ -83,12 +105,12 @@ export const SECTION_REGISTRY: SectionEntry[] = [
   { id: '2.3', title: 'Automation Classification', order: 23, part: PART1, baseMarkdown: 'PLANNED, MANUAL, ENFORCED, AUTOMATED, VERIFIED.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('2.3'), true) },
   { id: '2.4', title: 'System Telemetry & Evidence', order: 24, part: PART1, baseMarkdown: 'Audit events and metrics provide evidence for governance compliance.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('2.4'), true) },
   { id: '2.5', title: 'Continuous Improvement Cycle', order: 25, part: PART1, baseMarkdown: 'Gap analysis and Auto-Builder drive continuous improvement.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('2.5'), true) },
-  { id: '3.0', title: 'Clause Risk Governance Architecture', order: 30, part: PART2, baseMarkdown: 'Clause library and risk classification model form the foundation.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('3.0'), true) },
-  { id: '3.1', title: 'Clause Library Structure', order: 31, part: PART2, baseMarkdown: 'Clause library contains FAR/DFARS clauses with type, category, and scoring presets.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('3.1'), true) },
+  { id: '3.0', title: 'Clause Risk Governance Architecture', order: 30, part: PART2, baseMarkdown: 'Clause library and risk classification model form the foundation.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '3.0', getPillarsForSection('3.0'), true, 'clause') },
+  { id: '3.1', title: 'Clause Library Structure', order: 31, part: PART2, baseMarkdown: 'Clause library contains FAR/DFARS clauses with type, category, and scoring presets.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '3.1', getPillarsForSection('3.1'), true, 'clause') },
   { id: '3.2', title: 'Risk Classification Model', order: 32, part: PART2, baseMarkdown: 'Five dimensions: Financial, Cyber, Liability, Regulatory, Performance.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('3.2'), true) },
   { id: '3.3', title: 'Weighting & Thresholds', order: 33, part: PART2, baseMarkdown: 'Configurable weights and L1–L4 thresholds in risk model config.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('3.3'), true) },
   { id: '3.4', title: 'Escalation Triggers', order: 34, part: PART2, baseMarkdown: 'L4 clauses, 3+ L3, Cost-Reimbursable + risk, DFARS 7012, Indemnification L3+.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('3.4'), true) },
-  { id: '3.5', title: 'Clause Version Control', order: 35, part: PART2, baseMarkdown: 'Clause library supports versioning and default presets.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('3.5'), true) },
+  { id: '3.5', title: 'Clause Version Control', order: 35, part: PART2, baseMarkdown: 'Clause library supports versioning and default presets.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '3.5', getPillarsForSection('3.5'), true, 'clause') },
   { id: '3.6', title: 'Clause Risk Log Doctrine', order: 36, part: PART2, baseMarkdown: 'Every solicitation requires clause review or attestation.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('3.6'), true) },
   { id: '4.0', title: 'Pre-Bid Review & Escalation Enforcement', order: 40, part: PART2, baseMarkdown: 'Mandatory workflow: Intake → Clause Entry → Scoring → Risk Summary → Approvals → Finalize.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('4.0'), true) },
   { id: '4.1', title: 'Mandatory Workflow Architecture', order: 41, part: PART2, baseMarkdown: 'Stepper-based review with gated transitions.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('4.1'), true) },
@@ -101,9 +123,9 @@ export const SECTION_REGISTRY: SectionEntry[] = [
   { id: '5.2', title: 'Conditional Flow-Down Mapping', order: 52, part: PART2, baseMarkdown: 'Conditional clauses require case-by-case determination.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('5.2'), true) },
   { id: '5.3', title: 'Subcontract Risk Transmission', order: 53, part: PART2, baseMarkdown: 'Subcontracts inherit flow-down requirements.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('5.3'), BUILT_CONTRACTS) },
   { id: '5.4', title: 'Flow-Down Audit Requirements', order: 54, part: PART2, baseMarkdown: 'Audit trail captures flow-down decisions.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('5.4'), true) },
-  { id: '6.0', title: 'Cost Accounting Architecture', order: 60, part: PART3, baseMarkdown: 'Direct vs indirect segregation and job cost traceability.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('6.0'), BUILT_FINANCIAL) },
-  { id: '6.1', title: 'Direct vs Indirect Segregation', order: 61, part: PART3, baseMarkdown: 'Cost elements are classified as direct or indirect.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('6.1'), BUILT_FINANCIAL) },
-  { id: '6.2', title: 'Cost Pool Definitions', order: 62, part: PART3, baseMarkdown: 'Fringe, Overhead, G&A pools defined.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('6.2'), BUILT_FINANCIAL) },
+  { id: '6.0', title: 'Cost Accounting Architecture', order: 60, part: PART3, baseMarkdown: 'Direct vs indirect segregation and job cost traceability.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '6.0', getPillarsForSection('6.0'), BUILT_FINANCIAL, 'cost') },
+  { id: '6.1', title: 'Direct vs Indirect Segregation', order: 61, part: PART3, baseMarkdown: 'Cost elements are classified as direct or indirect.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '6.1', getPillarsForSection('6.1'), BUILT_FINANCIAL, 'cost') },
+  { id: '6.2', title: 'Cost Pool Definitions', order: 62, part: PART3, baseMarkdown: 'Fringe, Overhead, G&A pools defined.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '6.2', getPillarsForSection('6.2'), BUILT_FINANCIAL, 'cost') },
   { id: '6.3', title: 'Job Cost Traceability', order: 63, part: PART3, baseMarkdown: 'Job cost logs link to contracts.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('6.3'), BUILT_FINANCIAL) },
   { id: '6.4', title: 'Funding Threshold Monitoring', order: 64, part: PART3, baseMarkdown: 'Contract funding tracked against thresholds.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('6.4'), BUILT_CONTRACTS) },
   { id: '6.5', title: 'Change Order Financial Controls', order: 65, part: PART3, baseMarkdown: 'Change orders require financial review.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('6.5'), BUILT_CONTRACTS) },
@@ -127,21 +149,21 @@ export const SECTION_REGISTRY: SectionEntry[] = [
   { id: '10.2', title: 'Risk Tier Mapping', order: 102, part: PART4, baseMarkdown: 'L1–L4 mapped to indemnification exposure.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('10.2'), true) },
   { id: '10.3', title: 'Escalation Doctrine', order: 103, part: PART4, baseMarkdown: 'Indemnification L3+ triggers escalation.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('10.3'), true) },
   { id: '10.4', title: 'Risk Transfer Model', order: 104, part: PART4, baseMarkdown: 'Risk transfer through insurance and indemnification.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('10.4'), BUILT_CONTRACTS) },
-  { id: '11.0', title: 'CUI Boundary Architecture', order: 110, part: PART5, baseMarkdown: 'Logical and physical CUI segmentation.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('11.0'), BUILT_CYBER) },
-  { id: '11.1', title: 'Logical & Physical Segmentation', order: 111, part: PART5, baseMarkdown: 'CUI boundaries defined.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('11.1'), BUILT_CYBER) },
-  { id: '11.2', title: 'Role-Based Access Enforcement', order: 112, part: PART5, baseMarkdown: 'RBAC for CUI access.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('11.2'), BUILT_CYBER) },
-  { id: '11.3', title: 'MFA Enforcement', order: 113, part: PART5, baseMarkdown: 'MFA required for CUI systems.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('11.3'), BUILT_CYBER) },
-  { id: '11.4', title: 'Data Retention Controls', order: 114, part: PART5, baseMarkdown: 'Retention and disposal controls.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('11.4'), BUILT_CYBER) },
-  { id: '12.0', title: 'Incident Response Framework', order: 120, part: PART5, baseMarkdown: 'Detection, escalation, 72-hour reporting.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('12.0'), BUILT_CYBER) },
-  { id: '12.1', title: 'Detection & Escalation', order: 121, part: PART5, baseMarkdown: 'Incident detection and escalation workflow.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('12.1'), BUILT_CYBER) },
-  { id: '12.2', title: '72-Hour Reporting Doctrine', order: 122, part: PART5, baseMarkdown: 'DFARS 252.204-7012 reporting requirements.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('12.2'), BUILT_CYBER) },
-  { id: '12.3', title: 'Documentation Requirements', order: 123, part: PART5, baseMarkdown: 'Incident documentation requirements.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('12.3'), BUILT_CYBER) },
-  { id: '12.4', title: 'Root Cause Analysis', order: 124, part: PART5, baseMarkdown: 'RCA for significant incidents.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('12.4'), BUILT_CYBER) },
-  { id: '13.0', title: 'CMMC Alignment Model', order: 130, part: PART5, baseMarkdown: 'CMMC control mapping and ownership.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('13.0'), BUILT_CYBER) },
-  { id: '13.1', title: 'Control Mapping Strategy', order: 131, part: PART5, baseMarkdown: 'NIST 800-171 to CMMC mapping.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('13.1'), BUILT_CYBER) },
-  { id: '13.2', title: 'Control Ownership', order: 132, part: PART5, baseMarkdown: 'Control owner assignment.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('13.2'), BUILT_CYBER) },
-  { id: '13.3', title: 'Continuous Monitoring', order: 133, part: PART5, baseMarkdown: 'Ongoing control assessment.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('13.3'), BUILT_CYBER) },
-  { id: '13.4', title: 'POA&M Governance', order: 134, part: PART5, baseMarkdown: 'Plan of Action & Milestones tracking.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('13.4'), BUILT_CYBER) },
+  { id: '11.0', title: 'CUI Boundary Architecture', order: 110, part: PART5, baseMarkdown: 'Logical and physical CUI segmentation.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '11.0', getPillarsForSection('11.0'), BUILT_CYBER, 'cyber') },
+  { id: '11.1', title: 'Logical & Physical Segmentation', order: 111, part: PART5, baseMarkdown: 'CUI boundaries defined.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '11.1', getPillarsForSection('11.1'), BUILT_CYBER, 'cyber') },
+  { id: '11.2', title: 'Role-Based Access Enforcement', order: 112, part: PART5, baseMarkdown: 'RBAC for CUI access.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '11.2', getPillarsForSection('11.2'), BUILT_CYBER, 'cyber') },
+  { id: '11.3', title: 'MFA Enforcement', order: 113, part: PART5, baseMarkdown: 'MFA required for CUI systems.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '11.3', getPillarsForSection('11.3'), BUILT_CYBER, 'cyber') },
+  { id: '11.4', title: 'Data Retention Controls', order: 114, part: PART5, baseMarkdown: 'Retention and disposal controls.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '11.4', getPillarsForSection('11.4'), BUILT_CYBER, 'cyber') },
+  { id: '12.0', title: 'Incident Response Framework', order: 120, part: PART5, baseMarkdown: 'Detection, escalation, 72-hour reporting.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '12.0', getPillarsForSection('12.0'), BUILT_CYBER, 'cyber') },
+  { id: '12.1', title: 'Detection & Escalation', order: 121, part: PART5, baseMarkdown: 'Incident detection and escalation workflow.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '12.1', getPillarsForSection('12.1'), BUILT_CYBER, 'cyber') },
+  { id: '12.2', title: '72-Hour Reporting Doctrine', order: 122, part: PART5, baseMarkdown: 'DFARS 252.204-7012 reporting requirements.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '12.2', getPillarsForSection('12.2'), BUILT_CYBER, 'cyber') },
+  { id: '12.3', title: 'Documentation Requirements', order: 123, part: PART5, baseMarkdown: 'Incident documentation requirements.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '12.3', getPillarsForSection('12.3'), BUILT_CYBER, 'cyber') },
+  { id: '12.4', title: 'Root Cause Analysis', order: 124, part: PART5, baseMarkdown: 'RCA for significant incidents.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '12.4', getPillarsForSection('12.4'), BUILT_CYBER, 'cyber') },
+  { id: '13.0', title: 'CMMC Alignment Model', order: 130, part: PART5, baseMarkdown: 'CMMC control mapping and ownership.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '13.0', getPillarsForSection('13.0'), BUILT_CYBER, 'cyber') },
+  { id: '13.1', title: 'Control Mapping Strategy', order: 131, part: PART5, baseMarkdown: 'NIST 800-171 to CMMC mapping.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '13.1', getPillarsForSection('13.1'), BUILT_CYBER, 'cyber') },
+  { id: '13.2', title: 'Control Ownership', order: 132, part: PART5, baseMarkdown: 'Control owner assignment.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '13.2', getPillarsForSection('13.2'), BUILT_CYBER, 'cyber') },
+  { id: '13.3', title: 'Continuous Monitoring', order: 133, part: PART5, baseMarkdown: 'Ongoing control assessment.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '13.3', getPillarsForSection('13.3'), BUILT_CYBER, 'cyber') },
+  { id: '13.4', title: 'POA&M Governance', order: 134, part: PART5, baseMarkdown: 'Plan of Action & Milestones tracking.', maturityEvaluator: (ctx) => evalSectionWithRegistry(ctx, '13.4', getPillarsForSection('13.4'), BUILT_CYBER, 'cyber') },
   { id: '14.0', title: 'REA & Claims Governance', order: 140, part: PART6, baseMarkdown: 'REA calculation and claims documentation.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('14.0'), BUILT_CONTRACTS) },
   { id: '14.1', title: 'REA Calculation Doctrine', order: 141, part: PART6, baseMarkdown: 'REA calculation methodology.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('14.1'), BUILT_CONTRACTS) },
   { id: '14.2', title: 'Claims Documentation Indexing', order: 142, part: PART6, baseMarkdown: 'Claims documentation structure.', maturityEvaluator: (ctx) => evalSection(ctx, getPillarsForSection('14.2'), BUILT_CONTRACTS) },
