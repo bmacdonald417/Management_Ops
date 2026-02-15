@@ -1,5 +1,5 @@
 import { query } from '../db/connection.js';
-import { getKBStats } from '../complianceKB/stats.js';
+import { getKBStats } from './complianceKB/stats.js';
 
 export interface MaturityMetrics {
   reviewRate: number;
