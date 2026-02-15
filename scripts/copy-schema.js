@@ -14,3 +14,13 @@ if (!fs.existsSync(src)) {
 fs.mkdirSync(destDir, { recursive: true });
 fs.copyFileSync(src, dest);
 console.log('Copied schema.sql to backend/dist/db');
+
+const migrationsSrc = path.join(__dirname, '../backend/src/db/migrations');
+const migrationsDest = path.join(__dirname, '../backend/dist/db/migrations');
+if (fs.existsSync(migrationsSrc)) {
+  fs.mkdirSync(migrationsDest, { recursive: true });
+  for (const f of fs.readdirSync(migrationsSrc).filter((x) => x.endsWith('.sql'))) {
+    fs.copyFileSync(path.join(migrationsSrc, f), path.join(migrationsDest, f));
+  }
+  console.log('Copied migrations to backend/dist/db/migrations');
+}

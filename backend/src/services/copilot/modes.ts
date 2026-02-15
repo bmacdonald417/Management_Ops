@@ -15,11 +15,14 @@ export type CopilotMode =
   | 'EXECUTIVE_BRIEF'
   | 'AUTOBUILDER_SECTION_HELP';
 
+export const NO_COMPLIANCE_SOURCES_FOUND = 'NO_COMPLIANCE_SOURCES_FOUND';
+
 export interface CopilotRunResult {
   success: boolean;
   result?: unknown;
-  citations: { docId: string; chunkId: string; sourceUrl?: string; title?: string }[];
+  citations: { documentId?: string; chunkId: string; externalId?: string; sourceUrl?: string; docId?: string; title?: string }[];
   error?: string;
+  errorCode?: string;
 }
 
 export interface ClauseEnrichPayload {
@@ -88,12 +91,16 @@ export interface AutobuilderSectionHelpResult {
 
 function citationsFromRetrieve(rows: RetrieveResult[]) {
   return rows.map((r) => ({
-    docId: r.documentId,
+    documentId: r.documentId,
     chunkId: r.chunkId,
+    externalId: r.externalId,
     sourceUrl: r.sourceUrl,
+    docId: r.documentId,
     title: r.title
   }));
 }
+
+const STRICT_SYSTEM_PREFIX = 'You are a strict federal contract governance assistant. Only answer using the provided compliance sources. Do not speculate. Every claim must cite at least one source. Return valid JSON only.';
 
 function buildContextFromChunks(chunks: RetrieveResult[]): string {
   return chunks
@@ -148,7 +155,8 @@ export async function runClauseEnrich(payload: ClauseEnrichPayload): Promise<Cop
   if (chunks.length === 0) {
     return {
       success: false,
-      result: { noSources: true, suggestedSteps: ['Ingest FAR/DFARS clause library via Compliance Registry', 'Run chunking and embeddings'] },
+      error: 'No indexed compliance sources available.',
+      errorCode: NO_COMPLIANCE_SOURCES_FOUND,
       citations: []
     };
   }
@@ -165,7 +173,7 @@ export async function runClauseEnrich(payload: ClauseEnrichPayload): Promise<Cop
     citations: 'array of {docId, chunkId, sourceUrl}'
   };
   const res = await callOpenAIStructured<ClauseEnrichResult>(
-    'You are a federal contract governance expert. Return JSON with clause enrichment suggestions based ONLY on the provided compliance context. Use the citations from the context.',
+    `${STRICT_SYSTEM_PREFIX} Return JSON with clause enrichment. All claims must cite provided sources.`,
     `Clause: ${clauseNumber}\n\nContext:\n${context}\n\nReturn JSON: ${JSON.stringify(schema)}`,
     schema as unknown as Record<string, unknown>
   );
@@ -182,7 +190,16 @@ export async function runPrebidClauseExtract(payload: PrebidClauseExtractPayload
     12
   );
 
-  const context = chunks.length > 0 ? buildContextFromChunks(chunks) : 'No clause library chunks available.';
+  if (chunks.length === 0) {
+    return {
+      success: false,
+      error: 'No indexed compliance sources available.',
+      errorCode: NO_COMPLIANCE_SOURCES_FOUND,
+      citations: []
+    };
+  }
+
+  const context = buildContextFromChunks(chunks);
   const schema = {
     detectedClauses: 'array of {clauseNumber, title, confidence 0-1}',
     missingFromLibrary: 'array of clause numbers not in library',
@@ -190,7 +207,7 @@ export async function runPrebidClauseExtract(payload: PrebidClauseExtractPayload
     citations: 'array of {docId, chunkId, sourceUrl}'
   };
   const res = await callOpenAIStructured<PrebidClauseExtractResult>(
-    'Extract FAR/DFARS clause references from the solicitation text. Return JSON with detectedClauses, missingFromLibrary, recommendedNextActions. Use only provided context.',
+    `${STRICT_SYSTEM_PREFIX} Extract FAR/DFARS clause references. Use only provided context.`,
     `Solicitation excerpt:\n${text}\n\nContext:\n${context}\n\nReturn JSON: ${JSON.stringify(schema)}`,
     schema as unknown as Record<string, unknown>
   );
@@ -216,7 +233,16 @@ export async function runPrebidScoreAssist(payload: PrebidScoreAssistPayload): P
     10
   );
 
-  const context = chunks.length > 0 ? buildContextFromChunks(chunks) : 'No context available.';
+  if (chunks.length === 0) {
+    return {
+      success: false,
+      error: 'No indexed compliance sources available.',
+      errorCode: NO_COMPLIANCE_SOURCES_FOUND,
+      citations: []
+    };
+  }
+
+  const context = buildContextFromChunks(chunks);
   const entriesJson = JSON.stringify(entries);
   const schema = {
     updates: 'array of {clauseEntryId, scores: {financial,cyber,liability,regulatory,performance}, riskLevel: L1-L4, escalationTrigger: boolean, reason}',
@@ -224,7 +250,7 @@ export async function runPrebidScoreAssist(payload: PrebidScoreAssistPayload): P
     citations: 'array'
   };
   const res = await callOpenAIStructured<PrebidScoreAssistResult>(
-    'Suggest risk scores for clause entries based on compliance context. Return JSON with updates and solicitationRiskSummary.',
+    `${STRICT_SYSTEM_PREFIX} Suggest risk scores. Use only provided context. Include reasoning for each update.`,
     `Clause entries:\n${entriesJson}\n\nContext:\n${context}\n\nReturn JSON: ${JSON.stringify(schema)}`,
     schema as unknown as Record<string, unknown>
   );
@@ -262,7 +288,16 @@ export async function runExecutiveBrief(payload: ExecutiveBriefPayload): Promise
     10
   );
 
-  const context = chunks.length > 0 ? buildContextFromChunks(chunks) : 'No governance context available.';
+  if (chunks.length === 0) {
+    return {
+      success: false,
+      error: 'No indexed compliance sources available.',
+      errorCode: NO_COMPLIANCE_SOURCES_FOUND,
+      citations: []
+    };
+  }
+
+  const context = buildContextFromChunks(chunks);
   const schema = {
     onePager: 'markdown string',
     keyRisks: 'array of strings',
@@ -271,7 +306,7 @@ export async function runExecutiveBrief(payload: ExecutiveBriefPayload): Promise
     citations: 'array'
   };
   const res = await callOpenAIStructured<ExecutiveBriefResult>(
-    'Generate an executive one-pager brief and bid/no-bid recommendation for this solicitation. Return JSON.',
+    `${STRICT_SYSTEM_PREFIX} Generate executive brief and bid/no-bid. Use only provided context.`,
     `Solicitation summary:\n${summary}\n\nContext:\n${context}\n\nReturn JSON: ${JSON.stringify(schema)}`,
     schema as unknown as Record<string, unknown>
   );
@@ -290,13 +325,8 @@ export async function runAutobuilderSectionHelp(payload: AutobuilderSectionHelpP
   if (chunks.length === 0) {
     return {
       success: false,
-      result: {
-        noSources: true,
-        sectionDraft: '',
-        implementationGuidance: ['Ingest governance manual sections via Compliance Registry', 'Run chunking and embeddings'],
-        missingArtifacts: [],
-        citations: []
-      },
+      error: 'No indexed compliance sources available.',
+      errorCode: NO_COMPLIANCE_SOURCES_FOUND,
       citations: []
     };
   }
@@ -309,7 +339,7 @@ export async function runAutobuilderSectionHelp(payload: AutobuilderSectionHelpP
     citations: 'array'
   };
   const res = await callOpenAIStructured<AutobuilderSectionHelpResult>(
-    `Draft governance manual content for section ${payload.sectionId}. Return JSON.`,
+    `${STRICT_SYSTEM_PREFIX} Draft governance manual content for section ${payload.sectionId}. Use only provided context.`,
     `Section: ${payload.sectionId}\nContext: ${payload.contextSnapshot ?? 'none'}\n\nReference:\n${context}\n\nReturn JSON: ${JSON.stringify(schema)}`,
     schema as unknown as Record<string, unknown>
   );

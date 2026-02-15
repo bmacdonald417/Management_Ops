@@ -1,6 +1,33 @@
 import { useState } from 'react';
 import client from '../../api/client';
 
+const NO_COMPLIANCE_SOURCES_FOUND = 'NO_COMPLIANCE_SOURCES_FOUND';
+
+function SourcesUsedSection({ citations }: { citations: { docId?: string; documentId?: string; chunkId: string; sourceUrl?: string; title?: string; externalId?: string }[] }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="border-t pt-3">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-gov-navy"
+      >
+        {expanded ? '▼' : '▶'} Sources Used ({citations.length})
+      </button>
+      {expanded && (
+        <ul className="text-xs space-y-1 max-h-40 overflow-y-auto mt-2 pl-4">
+          {citations.map((c, i) => (
+            <li key={i}>
+              <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-gov-blue hover:underline">
+                {c.title || c.externalId || c.chunkId?.slice(0, 8)}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export type CopilotMode =
   | 'CLAUSE_ENRICH'
   | 'PREBID_CLAUSE_EXTRACT'
@@ -49,14 +76,15 @@ export default function CopilotDrawer({
   const [result, setResult] = useState<{
     success: boolean;
     result?: unknown;
-    citations?: { docId: string; chunkId: string; sourceUrl?: string; title?: string }[];
+    citations?: { docId?: string; chunkId: string; sourceUrl?: string; title?: string; documentId?: string; externalId?: string }[];
     error?: string;
+    errorCode?: string;
   } | null>(null);
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [applying, setApplying] = useState(false);
 
-  const canApplyEnrich = ['Level 1', 'Level 2', 'Level 3'].includes(userRole);
-  const canApplyScores = ['Level 1', 'Level 2', 'Level 3'].includes(userRole);
+  const canApplyEnrich = ['Level 1', 'Level 3'].includes(userRole);
+  const canApplyScores = ['Level 1', 'Level 3'].includes(userRole);
 
   const runCopilot = async () => {
     setLoading(true);
@@ -89,14 +117,16 @@ export default function CopilotDrawer({
         success: data.success,
         result: data.result,
         citations: data.citations ?? [],
-        error: data.error
+        error: data.error,
+        errorCode: data.errorCode
       });
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { error?: string; configured?: boolean } }; status?: number };
+      const err = e as { response?: { data?: { error?: string; message?: string; configured?: boolean } }; status?: number };
       setAiConfigured(err.response?.data?.configured !== false);
       setResult({
         success: false,
-        error: err.response?.data?.error ?? (err.status === 503 ? 'AI not configured' : 'Request failed'),
+        error: err.response?.data?.message ?? err.response?.data?.error ?? (err.status === 503 ? 'AI not configured' : 'Request failed'),
+        errorCode: err.response?.data?.error,
         citations: []
       });
     } finally {
@@ -159,7 +189,7 @@ export default function CopilotDrawer({
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} aria-hidden="true" />
       <div className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-xl z-50 flex flex-col">
         <div className="flex justify-between items-center p-4 border-b bg-gov-navy text-white">
-          <h2 className="font-display font-semibold text-lg">Governance Copilot</h2>
+          <h2 className="font-display font-semibold text-lg">Governance Copilot (Strict Mode)</h2>
           <button onClick={onClose} className="text-white/80 hover:text-white text-xl">&times;</button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -230,17 +260,21 @@ export default function CopilotDrawer({
             {loading ? 'Running...' : 'Run'}
           </button>
 
-          {result?.error && (
+          {(result?.error || result?.errorCode === NO_COMPLIANCE_SOURCES_FOUND) && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              {result.error}
+              {result.errorCode === NO_COMPLIANCE_SOURCES_FOUND ? (
+                <p><strong>No sources found.</strong> Ingest compliance data via Compliance Registry and run embeddings.</p>
+              ) : (
+                result.error
+              )}
             </div>
           )}
 
           {result && res && (
             <div className="space-y-3">
               <h3 className="font-semibold text-gov-navy">Result</h3>
-              {(res as { noSources?: boolean }).noSources ? (
-                <p className="text-amber-700 text-sm">No sources found. Ingest data via Compliance Registry and run embeddings.</p>
+              {(res as { noSources?: boolean }).noSources || result?.errorCode === NO_COMPLIANCE_SOURCES_FOUND ? (
+                <p className="text-amber-700 text-sm">No indexed compliance sources available. Ingest data via Compliance Registry and run embeddings.</p>
               ) : (
                 <>
                   {res.onePager && (
@@ -317,18 +351,7 @@ export default function CopilotDrawer({
               )}
 
               {citations.length > 0 && (
-                <div className="border-t pt-3">
-                  <h4 className="text-sm font-medium text-slate-600 mb-1">Citations</h4>
-                  <ul className="text-xs space-y-1 max-h-32 overflow-y-auto">
-                    {citations.map((c, i) => (
-                      <li key={i}>
-                        <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-gov-blue hover:underline">
-                          {c.title || c.chunkId?.slice(0, 8)}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <SourcesUsedSection citations={citations} />
               )}
             </div>
           )}
