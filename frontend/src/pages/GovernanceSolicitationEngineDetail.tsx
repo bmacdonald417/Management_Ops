@@ -324,7 +324,7 @@ export default function GovernanceSolicitationEngineDetail() {
             <div className="space-y-4">
               <div className="grid grid-cols-4 gap-4">
                 <div><div className="text-sm text-slate-500">Overall Level</div><div><RiskBadgeL level={(riskLog.overall_risk_level as string) ?? 'L1'} /></div></div>
-                <div><div className="text-sm text-slate-500">Score</div><div className="text-xl font-bold">{riskLog.overall_risk_score_percent}%</div></div>
+                <div><div className="text-sm text-slate-500">Score</div><div className="text-xl font-bold">{String(riskLog.overall_risk_score_percent ?? 0)}%</div></div>
                 <div><div className="text-sm text-slate-500">High Risk Clauses</div><div>{String(riskLog.high_risk_clause_count ?? 0)}</div></div>
                 <div><div className="text-sm text-slate-500">Generated</div><div>{new Date(riskLog.generated_at as string).toLocaleString()}</div></div>
               </div>
