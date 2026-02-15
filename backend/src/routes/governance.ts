@@ -10,6 +10,7 @@ import {
   CLAUSE_CATEGORIES,
   CONTRACT_TYPES
 } from '../services/governanceScoring.js';
+import { searchClauses } from '../services/clauseService.js';
 import { computeGovernanceIndex } from '../services/governanceMaturity.js';
 import { loadAutoBuilderContext } from '../services/autoBuilder/context.js';
 import { generateManualMarkdown, generateEvidenceMarkdown } from '../services/autoBuilder/generate.js';
@@ -19,6 +20,15 @@ import { z } from 'zod';
 
 const router = Router();
 router.use(authenticate);
+
+/** @deprecated Phase 1: clause_review_entries is legacy; canonical clause source is regulatory_clauses via clauseService */
+const _legacyWarned = new Set<string>();
+function warnLegacyClauseReview(path: string) {
+  if (!_legacyWarned.has(path)) {
+    _legacyWarned.add(path);
+    console.warn(`[DEPRECATED] Legacy clause_review_entries path hit: ${path}`);
+  }
+}
 
 function logAudit(
   entityType: string,
@@ -240,6 +250,7 @@ router.get('/solicitations/:id', async (req, res) => {
   );
   const currentVer = (sol as { current_version: number }).current_version ?? 1;
   const verId = (versions.rows.find((v) => (v as { version: number }).version === currentVer) as { id: string })?.id;
+  if (verId) warnLegacyClauseReview('GET /solicitations/:id (clause_review_entries)');
   const clauses = verId
     ? await query(
         `SELECT * FROM clause_review_entries WHERE version_id = $1 ORDER BY created_at`,
@@ -325,6 +336,7 @@ router.post(
       })
       .parse(req.body);
 
+    warnLegacyClauseReview('POST /solicitations/:id/clauses (clause_review_entries)');
     const strictCheck = await validateClauseForStrictMode(body.clause_number);
     if (!strictCheck.ok) return res.status(400).json({ error: strictCheck.error });
 
@@ -380,6 +392,7 @@ router.post(
     if (!canEdit(req.user?.role ?? '', sol.owner_id, req.user?.id ?? '')) return res.status(403).json({ error: 'Forbidden' });
     const ver = (await query(`SELECT id FROM solicitation_versions WHERE solicitation_id = $1 AND version = $2`, [id, sol.current_version])).rows[0] as { id: string };
     if (!ver) return res.status(500).json({ error: 'Version not found' });
+    warnLegacyClauseReview('POST /solicitations/:id/clauses/bulk (clause_review_entries)');
 
     const added = [];
     for (const cn of clauses) {
@@ -415,6 +428,7 @@ router.put(
     const sol = (await query(`SELECT * FROM solicitations WHERE id = $1`, [id])).rows[0] as { status: string; owner_id: string } | undefined;
     if (!sol || sol.status === 'FINALIZED') return res.status(404).json({ error: 'Not found' });
     if (!canEdit(req.user?.role ?? '', sol.owner_id, req.user?.id ?? '')) return res.status(403).json({ error: 'Forbidden' });
+    warnLegacyClauseReview('PUT /solicitations/:id/clauses/:clauseId (clause_review_entries)');
     const body = req.body;
     const dims = ['financial_dim', 'cyber_dim', 'liability_dim', 'regulatory_dim', 'performance_dim'];
     const updates: string[] = [];
@@ -577,18 +591,12 @@ router.get('/solicitations/:id/audit', async (req, res) => {
   res.json(r.rows);
 });
 
-// Clause library
+// Clause library (canonical: regulatory_clauses + overlay via clauseService)
 router.get('/clause-library', async (req, res) => {
   const { search } = req.query;
-  let sql = `SELECT * FROM clause_library_items WHERE active = true`;
-  const params: unknown[] = [];
-  if (search) {
-    sql += ` AND (clause_number ILIKE $1 OR title ILIKE $1)`;
-    params.push(`%${search}%`);
-  }
-  sql += ' ORDER BY clause_number';
-  const r = await query(sql, params);
-  res.json(r.rows);
+  const queryStr = (search && typeof search === 'string') ? search : '';
+  const rows = await searchClauses(queryStr, { active: true }, 500);
+  res.json(rows);
 });
 
 router.post(

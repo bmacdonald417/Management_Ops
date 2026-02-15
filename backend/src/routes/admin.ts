@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { query } from '../db/connection.js';
+import { searchClauses } from '../services/clauseService.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { ingestCsv } from '../services/complianceRegistry/ingestion.js';
 import { setActiveVersionForCategory } from '../services/complianceRegistry/versionControl.js';
@@ -108,38 +109,27 @@ router.post('/compliance-registry/run-embeddings', async (req, res) => {
   res.json(result);
 });
 
+// Canonical clause read via clauseService (regulatory_clauses + overlay)
 router.get('/regulatory-clauses', async (req, res) => {
   const { search, regulationType, riskScore } = req.query;
-  const params: unknown[] = [];
-  const conditions: string[] = [];
-  let i = 1;
-  if (search && typeof search === 'string' && search.trim()) {
-    conditions.push(`(clause_number ILIKE $${i} OR title ILIKE $${i})`);
-    params.push(`%${search.trim()}%`);
-    i++;
-  }
-  if (regulationType && (regulationType === 'FAR' || regulationType === 'DFARS')) {
-    conditions.push(`regulation_type = $${i}`);
-    params.push(regulationType);
-    i++;
-  }
+  const queryStr = (search && typeof search === 'string') ? search.trim() : '';
+  const filters: { regulationType?: 'FAR' | 'DFARS'; riskScore?: number } = {};
+  if (regulationType === 'FAR' || regulationType === 'DFARS') filters.regulationType = regulationType;
   if (riskScore !== undefined && riskScore !== '') {
     const score = parseInt(String(riskScore), 10);
-    if (!isNaN(score)) {
-      conditions.push(`risk_score = $${i}`);
-      params.push(score);
-      i++;
-    }
+    if (!isNaN(score)) filters.riskScore = score;
   }
-  const where = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
-  const r = await query(
-    `SELECT id, regulation_type as "regulationType", part, clause_number as "clauseNumber", title,
-            risk_score as "riskScore", risk_category as "riskCategory", flow_down_required as "flowDownRequired"
-     FROM regulatory_clauses${where}
-     ORDER BY regulation_type, clause_number`,
-    params
-  );
-  res.json(r.rows);
+  const rows = await searchClauses(queryStr, filters, 500);
+  res.json(rows.map((c) => ({
+    id: c.id,
+    regulationType: c.regulationType,
+    part: c.part,
+    clauseNumber: c.clauseNumber,
+    title: c.title,
+    riskScore: c.riskScore,
+    riskCategory: c.riskCategory,
+    flowDownRequired: c.flowDownRequired
+  })));
 });
 
 router.post('/compliance-registry/sources/:id/activate', async (req, res) => {

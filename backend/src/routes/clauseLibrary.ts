@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { query } from '../db/connection.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { seedClauseLibraryStarter } from '../db/seeds/05_clause_library_starter.js';
+import { searchClauses, getClauseWithOverlay } from '../services/clauseService.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -35,74 +36,38 @@ function normalizeClauseNumber(num: string): string {
   return num.replace(/^(FAR|DFARS)\s*/i, '').replace(/\s+/g, '').trim();
 }
 
-// GET /library - List with filters (all authenticated)
+// GET /library - List with filters (canonical: regulatory_clauses + overlay via clauseService)
 router.get('/library', async (req, res) => {
   const { type, category, flow_down, active, search, regulation, risk_level } = req.query;
-  let sql = 'SELECT * FROM clause_library_items WHERE 1=1';
-  const params: unknown[] = [];
-  let i = 1;
-
-  if (type && type !== 'All') {
-    sql += ` AND type = $${i++}`;
-    params.push(type);
+  const queryStr = (search && typeof search === 'string') ? search : '';
+  const filters: { regulationType?: 'FAR' | 'DFARS'; riskScore?: number; category?: string; flowDown?: string; active?: boolean } = {};
+  const reg = (type || regulation) as string;
+  if (reg && reg !== 'All' && (reg === 'FAR' || reg === 'DFARS')) filters.regulationType = reg;
+  if (category && typeof category === 'string') filters.category = category;
+  if (flow_down && typeof flow_down === 'string') filters.flowDown = flow_down;
+  if (active !== undefined && active !== '') filters.active = active === 'true' || active === '1';
+  if (risk_level && typeof risk_level === 'string') {
+    const rl = parseInt(risk_level, 10);
+    if (!isNaN(rl)) filters.riskScore = rl;
   }
-  if (regulation && regulation !== '') {
-    sql += ` AND type = $${i++}`;
-    params.push(regulation);
-  }
-  if (category) {
-    sql += ` AND category = $${i++}`;
-    params.push(category);
-  }
-  if (flow_down) {
-    sql += ` AND flow_down = $${i++}`;
-    params.push(flow_down);
-  }
-  if (active !== undefined && active !== '') {
-    const act = active === 'true' || active === '1';
-    sql += ` AND active = $${i++}`;
-    params.push(act);
-  }
-  if (search) {
-    sql += ` AND (clause_number ILIKE $${i++} OR title ILIKE $${i++})`;
-    params.push(`%${search}%`, `%${search}%`);
-  }
-  if (risk_level) {
-    sql += ` AND suggested_risk_level = $${i++}`;
-    params.push(parseInt(risk_level as string));
-  }
-
-  sql += ' ORDER BY type, clause_number ASC';
-  const result = await query(sql, params);
-  res.json(result.rows);
+  const rows = await searchClauses(queryStr, filters, 500);
+  res.json(rows);
 });
 
-// GET /library/search?q=&limit= - Typeahead for Governance Engine
+// GET /library/search?q=&limit= - Typeahead (canonical via clauseService)
 router.get('/library/search', async (req, res) => {
   const { q, limit } = req.query;
-  const search = (q as string)?.trim();
+  const search = (q as string)?.trim() ?? '';
   const lim = Math.min(parseInt((limit as string) ?? '10', 10), 25);
-  let sql = 'SELECT id, clause_number, title, category, type, suggested_risk_level, default_financial, default_cyber, default_liability, default_regulatory, default_performance FROM clause_library_items WHERE active = true';
-  const params: unknown[] = [];
-  if (search) {
-    sql += ` AND (clause_number ILIKE $1 OR title ILIKE $1)`;
-    params.push(`%${search}%`);
-  }
-  sql += ' ORDER BY clause_number ASC LIMIT $' + (params.length + 1);
-  params.push(lim);
-  const result = await query(sql, params);
-  res.json(result.rows);
+  const rows = await searchClauses(search, { active: true }, lim);
+  res.json(rows);
 });
 
-// GET /library/by-number/:number - Get clause by number for default presets
+// GET /library/by-number/:number - Get clause by number (canonical via clauseService)
 router.get('/library/by-number/:number', async (req, res) => {
-  const num = normalizeClauseNumber(req.params.number);
-  const result = await query(
-    'SELECT * FROM clause_library_items WHERE (clause_number = $1 OR clause_number ILIKE $2) AND active = true',
-    [num, `%${num}%`]
-  );
-  if (result.rows.length === 0) return res.status(404).json({ error: 'Clause not found' });
-  res.json(result.rows[0]);
+  const clause = await getClauseWithOverlay(req.params.number);
+  if (!clause) return res.status(404).json({ error: 'Clause not found' });
+  res.json(clause);
 });
 
 // POST /library/seed - Starter Pack Seed (SysAdmin/Quality only)
@@ -230,10 +195,9 @@ router.put(
 
 // GET /library/:id - Get single clause
 router.get('/library/:id', async (req, res) => {
-  const { id } = req.params;
-  const result = await query('SELECT * FROM clause_library_items WHERE id = $1', [id]);
-  if (result.rows.length === 0) return res.status(404).json({ error: 'Clause not found' });
-  res.json(result.rows[0]);
+  const clause = await getClauseWithOverlay(req.params.id);
+  if (!clause) return res.status(404).json({ error: 'Clause not found' });
+  res.json(clause);
 });
 
 // GET /library/constants - Enums for frontend
