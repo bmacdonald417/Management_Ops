@@ -2,7 +2,15 @@ import { Router } from 'express';
 import { query } from '../db/connection.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { seedClauseLibraryStarter } from '../db/seeds/05_clause_library_starter.js';
-import { searchClauses, getClauseWithOverlay } from '../services/clauseService.js';
+import {
+  searchClauses,
+  getClauseWithOverlay,
+  getClauseByNumber,
+  clauseExistsInRegulatory,
+  normalizeClauseNumber,
+  inferRegulationType,
+  type RegulationType
+} from '../services/clauseService.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -30,10 +38,6 @@ function logAudit(
      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
     [entityType, entityId, action, fieldName ?? null, oldVal ?? null, newVal ?? null, actorId]
   ).catch((err) => console.error('Clause library audit failed:', err));
-}
-
-function normalizeClauseNumber(num: string): string {
-  return num.replace(/^(FAR|DFARS)\s*/i, '').replace(/\s+/g, '').trim();
 }
 
 // GET /library - List with filters (canonical: regulatory_clauses + overlay via clauseService)
@@ -65,7 +69,8 @@ router.get('/library/search', async (req, res) => {
 
 // GET /library/by-number/:number - Get clause by number (canonical via clauseService)
 router.get('/library/by-number/:number', async (req, res) => {
-  const clause = await getClauseWithOverlay(req.params.number);
+  const regType = (req.query.regType as RegulationType) || undefined;
+  const clause = await getClauseWithOverlay(req.params.number, regType);
   if (!clause) return res.status(404).json({ error: 'Clause not found' });
   res.json(clause);
 });
@@ -86,110 +91,201 @@ router.post(
   }
 );
 
-// POST /library - Add clause (SysAdmin/Quality only)
+// POST /library - DEPRECATED: Block new clause creation. Use POST /library/overrides for overlay.
 router.post(
   '/library',
   authorize(['Level 1', 'Level 3']),
   async (req, res) => {
-    try {
-    const body = z
-      .object({
-        clause_number: z.string().min(1),
-        title: z.string().min(1),
-        type: z.enum(CLAUSE_TYPES).optional(),
-        category: z.enum(CATEGORIES).optional(),
-        default_financial: z.number().min(1).max(5).optional(),
-        default_cyber: z.number().min(1).max(5).optional(),
-        default_liability: z.number().min(1).max(5).optional(),
-        default_regulatory: z.number().min(1).max(5).optional(),
-        default_performance: z.number().min(1).max(5).optional(),
-        suggested_risk_level: z.number().min(1).max(4).optional(),
-        flow_down: z.enum(FLOW_DOWN).optional(),
-        flow_down_notes: z.string().optional(),
-        notes: z.string().optional(),
-        active: z.boolean().optional()
-      })
-      .parse(req.body);
-
-    const clauseNumber = normalizeClauseNumber(body.clause_number);
-    const type = body.type ?? (clauseNumber.startsWith('252.') ? 'DFARS' : clauseNumber.startsWith('52.') ? 'FAR' : 'OTHER');
-
-    const result = await query(
-      `INSERT INTO clause_library_items (
-        clause_number, title, type, category,
-        default_financial, default_cyber, default_liability, default_regulatory, default_performance,
-        suggested_risk_level, flow_down, flow_down_notes, notes, active, updated_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      RETURNING *`,
-      [
-        clauseNumber,
-        body.title,
-        type,
-        body.category ?? null,
-        body.default_financial ?? 2,
-        body.default_cyber ?? 2,
-        body.default_liability ?? 2,
-        body.default_regulatory ?? 2,
-        body.default_performance ?? 2,
-        body.suggested_risk_level ?? null,
-        body.flow_down ?? 'CONDITIONAL',
-        body.flow_down_notes ?? null,
-        body.notes ?? null,
-        body.active ?? true,
-        req.user?.id
-      ]
-    );
-    const row = result.rows[0] as { id: string };
-    await logAudit('ClauseLibraryItem', row.id, 'created', req.user?.id);
-    res.status(201).json(row);
-    } catch (err: unknown) {
-      const pgErr = err as { code?: string };
-      if (pgErr?.code === '23505') {
-        return res.status(409).json({ error: 'Clause number already exists' });
-      }
-      throw err;
+    const body = z.object({
+      clause_number: z.string().min(1),
+      regulation_type: z.enum(['FAR', 'DFARS']).optional()
+    }).parse(req.body);
+    const num = normalizeClauseNumber(body.clause_number);
+    const regType = (body.regulation_type ?? inferRegulationType(num)) as RegulationType;
+    const exists = await clauseExistsInRegulatory(regType, num);
+    if (!exists) {
+      return res.status(400).json({
+        error: 'Cannot create brand-new clause. Clause must exist in Regulatory Library first.',
+        hint: 'Ingest via Admin > Compliance Registry (reg:ingest), then add overlay via POST /api/compliance/library/overrides'
+      });
     }
+    return res.status(400).json({
+      error: 'Use POST /api/compliance/library/overrides to add overlay for this clause.',
+      hint: 'Clause exists in regulatory_clauses. Add overlay via POST /library/overrides'
+    });
   }
 );
 
-// PUT /library/:id - Edit clause (SysAdmin/Quality only)
+// --- Overlay CRUD (Quality/SysAdmin only) ---
+
+// POST /library/overrides - Create overlay for existing regulatory clause
+router.post(
+  '/library/overrides',
+  authorize(['Level 1', 'Level 3']),
+  async (req, res) => {
+    const body = z.object({
+      clause_number: z.string().min(1),
+      regulation_type: z.enum(['FAR', 'DFARS']),
+      override_risk_category: z.string().optional(),
+      override_risk_score: z.number().min(1).max(100).optional(),
+      override_flow_down_required: z.boolean().optional(),
+      override_suggested_mitigation: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      notes: z.string().optional(),
+      flow_down_notes: z.string().optional()
+    }).parse(req.body);
+
+    const num = normalizeClauseNumber(body.clause_number);
+    const exists = await clauseExistsInRegulatory(body.regulation_type, num);
+    if (!exists) {
+      return res.status(400).json({
+        error: 'Clause must exist in regulatory_clauses. Ingest via Admin > Compliance Registry first.'
+      });
+    }
+
+    const rc = (await query(
+      `SELECT id, title FROM regulatory_clauses WHERE regulation_type = $1 AND clause_number = $2`,
+      [body.regulation_type, num]
+    )).rows[0] as { id: string; title: string };
+
+    const r = await query(
+      `INSERT INTO clause_library_items (
+        clause_number, regulation_type, title, type,
+        override_risk_category, override_risk_score, override_flow_down_required,
+        override_suggested_mitigation, tags, notes, flow_down_notes,
+        active, updated_by, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, true, $12, NOW())
+      ON CONFLICT (regulation_type, clause_number) DO UPDATE SET
+        override_risk_category = EXCLUDED.override_risk_category,
+        override_risk_score = EXCLUDED.override_risk_score,
+        override_flow_down_required = EXCLUDED.override_flow_down_required,
+        override_suggested_mitigation = EXCLUDED.override_suggested_mitigation,
+        tags = EXCLUDED.tags,
+        notes = EXCLUDED.notes,
+        flow_down_notes = EXCLUDED.flow_down_notes,
+        updated_at = NOW(),
+        updated_by = EXCLUDED.updated_by
+      RETURNING *`,
+      [
+        num,
+        body.regulation_type,
+        rc.title,
+        body.regulation_type,
+        body.override_risk_category ?? null,
+        body.override_risk_score ?? null,
+        body.override_flow_down_required ?? null,
+        body.override_suggested_mitigation ?? null,
+        JSON.stringify(body.tags ?? []),
+        body.notes ?? null,
+        body.flow_down_notes ?? null,
+        req.user?.id
+      ]
+    );
+    const row = r.rows[0];
+    await logAudit('ClauseOverlay', (row as { id: string }).id, 'created', req.user?.id, 'clause_number', undefined, num);
+    const merged = await getClauseByNumber(body.regulation_type, num);
+    res.status(201).json(merged ?? row);
+  }
+);
+
+// PUT /library/overrides/:id - Update overlay
 router.put(
-  '/library/:id',
+  '/library/overrides/:id',
   authorize(['Level 1', 'Level 3']),
   async (req, res) => {
     const { id } = req.params;
     const existing = (await query('SELECT * FROM clause_library_items WHERE id = $1', [id])).rows[0] as Record<string, unknown> | undefined;
-    if (!existing) return res.status(404).json({ error: 'Clause not found' });
+    if (!existing) return res.status(404).json({ error: 'Overlay not found' });
 
     const body = req.body;
     const allowed = [
-      'title', 'type', 'category',
-      'default_financial', 'default_cyber', 'default_liability', 'default_regulatory', 'default_performance',
-      'suggested_risk_level', 'flow_down', 'flow_down_notes', 'notes', 'active'
+      'override_risk_category', 'override_risk_score', 'override_flow_down_required',
+      'override_suggested_mitigation', 'tags', 'notes', 'flow_down_notes'
     ];
     const updates: string[] = [];
     const values: unknown[] = [id];
     let i = 2;
     for (const k of allowed) {
       if (body[k] !== undefined) {
-        updates.push(`${k} = $${i++}`);
-        values.push(body[k]);
+        if (k === 'tags') {
+          updates.push(`tags = $${i++}::jsonb`);
+          values.push(JSON.stringify(Array.isArray(body[k]) ? body[k] : []));
+        } else {
+          updates.push(`${k} = $${i++}`);
+          values.push(body[k]);
+        }
       }
     }
-    if (body.clause_number !== undefined) {
-      updates.push(`clause_number = $${i++}`);
-      values.push(normalizeClauseNumber(body.clause_number));
-    }
-    if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    if (updates.length === 0) return res.status(400).json({ error: 'No overlay fields to update' });
     updates.push('updated_at = NOW()', `updated_by = $${i++}`);
     values.push(req.user?.id);
 
-    const result = await query(
-      `UPDATE clause_library_items SET ${updates.join(', ')} WHERE id = $1 RETURNING *`,
+    await query(
+      `UPDATE clause_library_items SET ${updates.join(', ')} WHERE id = $1`,
       values
     );
-    await logAudit('ClauseLibraryItem', id, 'updated', req.user?.id);
-    res.json(result.rows[0]);
+    await logAudit('ClauseOverlay', id, 'updated', req.user?.id);
+    const regType = (existing.regulation_type ?? inferRegulationType(existing.clause_number as string)) as RegulationType;
+    const merged = await getClauseByNumber(regType, existing.clause_number as string);
+    res.json(merged);
+  }
+);
+
+// GET /library/overrides/by-number/:clauseNumber?regType=FAR|DFARS
+router.get('/library/overrides/by-number/:clauseNumber', async (req, res) => {
+  const num = normalizeClauseNumber(req.params.clauseNumber);
+  const regType = ((req.query.regType as string) || inferRegulationType(num)) as RegulationType;
+  if (regType !== 'FAR' && regType !== 'DFARS') {
+    return res.status(400).json({ error: 'regType must be FAR or DFARS' });
+  }
+  const clause = await getClauseByNumber(regType, num);
+  if (!clause) return res.status(404).json({ error: 'Clause not found' });
+  res.json(clause);
+});
+
+// PUT /library/:id - Edit overlay only (SysAdmin/Quality only)
+router.put(
+  '/library/:id',
+  authorize(['Level 1', 'Level 3']),
+  async (req, res) => {
+    const { id } = req.params;
+    const existing = (await query('SELECT * FROM clause_library_items WHERE id = $1', [id])).rows[0] as Record<string, unknown> | undefined;
+    if (!existing) return res.status(404).json({ error: 'Clause overlay not found' });
+
+    const body = req.body;
+    const overlayFields: { key: string; col: string; transform?: (v: unknown) => unknown }[] = [
+      { key: 'override_risk_category', col: 'override_risk_category' },
+      { key: 'category', col: 'override_risk_category' },
+      { key: 'override_risk_score', col: 'override_risk_score' },
+      { key: 'suggested_risk_level', col: 'override_risk_score' },
+      { key: 'override_flow_down_required', col: 'override_flow_down_required', transform: (v) => v === 'YES' || v === true },
+      { key: 'flow_down', col: 'override_flow_down_required', transform: (v) => v === 'YES' || v === true },
+      { key: 'override_suggested_mitigation', col: 'override_suggested_mitigation' },
+      { key: 'tags', col: 'tags', transform: (v) => JSON.stringify(Array.isArray(v) ? v : []) },
+      { key: 'notes', col: 'notes' },
+      { key: 'flow_down_notes', col: 'flow_down_notes' },
+      { key: 'active', col: 'active' }
+    ];
+    const updates: string[] = [];
+    const values: unknown[] = [id];
+    let i = 2;
+    const handled = new Set<string>();
+    for (const { key, col, transform } of overlayFields) {
+      if (body[key] === undefined || handled.has(col)) continue;
+      handled.add(col);
+      const val = transform ? transform(body[key]) : body[key];
+      updates.push(`${col} = $${i++}${col === 'tags' ? '::jsonb' : ''}`);
+      values.push(val);
+    }
+    if (updates.length === 0) return res.status(400).json({ error: 'No overlay fields to update' });
+    updates.push('updated_at = NOW()', `updated_by = $${i++}`);
+    values.push(req.user?.id);
+
+    await query(`UPDATE clause_library_items SET ${updates.join(', ')} WHERE id = $1`, values);
+    await logAudit('ClauseOverlay', id, 'updated', req.user?.id);
+    const regType = (existing.regulation_type ?? inferRegulationType(existing.clause_number as string)) as RegulationType;
+    const merged = await getClauseByNumber(regType, existing.clause_number as string);
+    res.json(merged);
   }
 );
 

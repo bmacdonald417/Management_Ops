@@ -6,14 +6,19 @@ import CopilotDrawer from '../components/governance/CopilotDrawer';
 interface ClauseItem {
   id: string;
   clause_number: string;
+  clauseNumber?: string;
   title: string;
-  category?: string;
-  default_financial: number;
-  default_cyber: number;
-  default_liability: number;
-  default_regulatory: number;
-  default_performance: number;
-  notes?: string;
+  effective_risk_category?: string | null;
+  effective_risk_score?: number | null;
+  base_risk_category?: string | null;
+  base_risk_score?: number | null;
+  hasOverlay?: boolean;
+  default_financial?: number;
+  default_cyber?: number;
+  default_liability?: number;
+  default_regulatory?: number;
+  default_performance?: number;
+  notes?: string | null;
 }
 
 export default function GovernanceClauseLibrary() {
@@ -26,7 +31,7 @@ export default function GovernanceClauseLibrary() {
 
   const load = () => {
     setLoading(true);
-    client.get('/governance/clause-library', { params: search ? { search } : {} }).then((r) => {
+    client.get('/compliance/library/search', { params: { q: search, limit: 100 } }).then((r) => {
       setClauses(r.data);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -64,7 +69,8 @@ export default function GovernanceClauseLibrary() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Clause</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Title</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Category</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Default Scores (F/C/L/R/P)</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Risk</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Scores</th>
               </tr>
             </thead>
               <tbody className="divide-y divide-slate-200">
@@ -78,11 +84,32 @@ export default function GovernanceClauseLibrary() {
                       Copilot
                     </button>
                   </td>
-                  <td className="px-6 py-4 font-mono font-medium">{c.clause_number}</td>
+                  <td className="px-6 py-4 font-mono font-medium">
+                    {c.clause_number ?? c.clauseNumber}
+                    {c.hasOverlay && (
+                      <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                        Override Active
+                      </span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-sm">{c.title}</td>
-                  <td className="px-6 py-4 text-sm">{c.category ?? '—'}</td>
                   <td className="px-6 py-4 text-sm">
-                    {c.default_financial}/{c.default_cyber}/{c.default_liability}/{c.default_regulatory}/{c.default_performance}
+                    {c.effective_risk_category ?? c.base_risk_category ?? '—'}
+                    {c.hasOverlay && c.base_risk_category && c.effective_risk_category !== c.base_risk_category && (
+                      <span className="text-slate-400 text-xs ml-1">(base: {c.base_risk_category})</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    {c.effective_risk_score ?? c.base_risk_score ?? '—'}
+                    {c.hasOverlay && c.base_risk_score != null && c.effective_risk_score !== c.base_risk_score && (
+                      <span className="text-slate-400 text-xs ml-1">(base: {c.base_risk_score})</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    {[c.default_financial, c.default_cyber, c.default_liability, c.default_regulatory, c.default_performance]
+                      .every((n) => n != null)
+                      ? `${c.default_financial}/${c.default_cyber}/${c.default_liability}/${c.default_regulatory}/${c.default_performance}`
+                      : '—'}
                   </td>
                 </tr>
               ))}

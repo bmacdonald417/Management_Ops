@@ -86,16 +86,22 @@ const STARTER_CLAUSES: StarterClause[] = [
 export async function seedClauseLibraryStarter(): Promise<number> {
   let count = 0;
   for (const c of STARTER_CLAUSES) {
+    const regType = c.type === 'DFARS' ? 'DFARS' : 'FAR';
     await query(
       `INSERT INTO clause_library_items (
-        clause_number, title, type, category,
+        clause_number, title, type, regulation_type, category,
         default_financial, default_cyber, default_liability, default_regulatory, default_performance,
-        suggested_risk_level, flow_down, flow_down_notes, notes, active, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, NOW())
-      ON CONFLICT (clause_number) DO UPDATE SET
+        suggested_risk_level, flow_down, flow_down_notes, notes, active, updated_at,
+        override_risk_category, override_risk_score, override_flow_down_required
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true, NOW(), $15, $16, $17)
+      ON CONFLICT (regulation_type, clause_number) DO UPDATE SET
         title = EXCLUDED.title,
         type = EXCLUDED.type,
+        regulation_type = EXCLUDED.regulation_type,
         category = EXCLUDED.category,
+        override_risk_category = EXCLUDED.override_risk_category,
+        override_risk_score = EXCLUDED.override_risk_score,
+        override_flow_down_required = EXCLUDED.override_flow_down_required,
         default_financial = EXCLUDED.default_financial,
         default_cyber = EXCLUDED.default_cyber,
         default_liability = EXCLUDED.default_liability,
@@ -110,6 +116,7 @@ export async function seedClauseLibraryStarter(): Promise<number> {
         c.clause_number,
         c.title,
         c.type,
+        regType,
         c.category,
         c.financial,
         c.cyber,
@@ -119,7 +126,10 @@ export async function seedClauseLibraryStarter(): Promise<number> {
         c.suggested_risk_level,
         c.flow_down,
         c.flow_down_notes ?? null,
-        c.notes ?? null
+        c.notes ?? null,
+        c.category,
+        c.suggested_risk_level,
+        c.flow_down === 'YES'
       ]
     );
     count++;
