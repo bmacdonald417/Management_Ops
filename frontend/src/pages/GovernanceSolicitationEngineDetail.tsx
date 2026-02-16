@@ -1,6 +1,6 @@
 /**
  * Governance Engine: Solicitation Detail with Clause Review workflow.
- * Tabs: Overview, Clause Extraction, Clause Review, Approvals, Clause Risk Log.
+ * Stepper: Intake → Clauses → Assess → Review → Approve-to-Bid → Risk Log.
  */
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
@@ -104,8 +104,9 @@ export default function GovernanceSolicitationEngineDetail() {
     }
   };
 
-  const handleRemoveClause = async (scId: string) => {
-    if (!id || !confirm('Remove this clause from the solicitation?')) return;
+  const handleRemoveClause = async (scId: string, skipConfirm = false) => {
+    if (!id) return;
+    if (!skipConfirm && !confirm('Remove this clause from the solicitation?')) return;
     setSubmitting(true);
     try {
       await client.delete(`/solicitations/${id}/clauses/${scId}`);
@@ -127,6 +128,16 @@ export default function GovernanceSolicitationEngineDetail() {
       alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Add failed');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleClauseClick = (rc: { id: string }) => {
+    if (submitting) return;
+    const existing = clauses.find((c) => c.clause_id === rc.id);
+    if (existing) {
+      handleRemoveClause(existing.id, true);
+    } else {
+      handleManualAdd(rc.id);
     }
   };
 
@@ -264,6 +275,7 @@ export default function GovernanceSolicitationEngineDetail() {
           </div>
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="font-medium mb-2">Add from Clause Library</h3>
+            <p className="text-sm text-slate-500 mb-2">Click to add, click again to remove.</p>
             <input
               type="text"
               placeholder="Search clause number or title…"
@@ -272,18 +284,27 @@ export default function GovernanceSolicitationEngineDetail() {
               className="w-full mb-2 px-4 py-2 border border-slate-300 rounded-lg text-sm"
             />
             <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
-              {regulatoryClauses.slice(0, 50).map((rc) => (
-                <button
-                  key={rc.id}
-                  onClick={() => handleManualAdd(rc.id)}
-                  disabled={submitting || clauses.some((c) => c.clause_id === rc.id)}
-                  className="px-3 py-1 text-sm border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {rc.clause_number}
-                </button>
-              ))}
+              {regulatoryClauses.slice(0, 50).map((rc) => {
+                const isAdded = clauses.some((c) => c.clause_id === rc.id);
+                return (
+                  <button
+                    key={rc.id}
+                    type="button"
+                    onClick={() => handleClauseClick(rc)}
+                    disabled={submitting}
+                    title={isAdded ? `Click to remove ${rc.clause_number}` : `Click to add ${rc.clause_number}`}
+                    className={`px-3 py-1.5 text-sm border rounded cursor-pointer transition-colors ${
+                      isAdded
+                        ? 'border-green-300 bg-green-50 text-green-700 hover:border-red-300 hover:bg-red-50 hover:text-red-700'
+                        : 'border-slate-300 hover:border-gov-blue hover:bg-gov-blue/10 hover:text-gov-navy disabled:opacity-50'
+                    }`}
+                  >
+                    {isAdded ? `${rc.clause_number} ✓` : rc.clause_number}
+                  </button>
+                );
+              })}
             </div>
-            <p className="text-xs text-slate-500 mt-2">Showing first 50. Use Clause Library page to search.</p>
+            <p className="text-xs text-slate-500 mt-2">Showing first 50. Click added clauses (green) to remove them.</p>
           </div>
         </div>
       )}
