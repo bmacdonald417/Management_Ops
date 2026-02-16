@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { query } from '../db/connection.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { extractClausesFromText } from '../services/clauseExtractor.js';
-import { searchClauses } from '../services/clauseService.js';
+import { searchClauses, getClauseByNumber, getClauseWithOverlay } from '../services/clauseService.js';
 import { getApproveToBidBlockers, generateRiskLogSnapshot } from '../services/workflowEngine.js';
 import { z } from 'zod';
 
@@ -201,12 +201,8 @@ router.post(
     const added: unknown[] = [];
 
     for (const e of extracted) {
-      const clauseRow = (await query(
-        `SELECT id, flow_down_required FROM regulatory_clauses WHERE clause_number = $1`,
-        [e.clauseNumber]
-      )).rows[0] as { id: string; flow_down_required: boolean } | undefined;
-
-      if (!clauseRow) continue;
+      const clauseDto = await getClauseByNumber(e.regulationType, e.clauseNumber);
+      if (!clauseDto) continue;
 
       try {
         const ins = await query(
@@ -214,9 +210,12 @@ router.post(
            VALUES ($1, $2, 'PASTED_TEXT', 0.9, $3)
            ON CONFLICT (solicitation_id, clause_id) DO NOTHING
            RETURNING *`,
-          [id, clauseRow.id, clauseRow.flow_down_required]
+          [id, clauseDto.id, clauseDto.effective_flow_down_required]
         );
-        if (ins.rows[0]) added.push(ins.rows[0]);
+        if (ins.rows[0]) {
+          added.push(ins.rows[0]);
+          await logAudit('SolicitationClause', (ins.rows[0] as { id: string }).id, 'clause_added', req.user?.id, { source: 'extract', clauseId: clauseDto.id });
+        }
       } catch {
         // skip dup
       }
@@ -241,18 +240,18 @@ router.post(
     const sol = (await query(`SELECT * FROM solicitations WHERE id = $1`, [id])).rows[0];
     if (!sol) return res.status(404).json({ error: 'Not found' });
 
-    const clause = (await query(`SELECT id, flow_down_required FROM regulatory_clauses WHERE id = $1`, [clauseId])).rows[0];
-    if (!clause) return res.status(404).json({ error: 'Clause not found' });
+    const clauseDto = await getClauseWithOverlay(clauseId);
+    if (!clauseDto) return res.status(404).json({ error: 'Clause not found' });
 
     const r = await query(
       `INSERT INTO solicitation_clauses (solicitation_id, clause_id, detected_from, is_flow_down_required)
        VALUES ($1, $2, 'MANUAL_ADD', $3)
        ON CONFLICT (solicitation_id, clause_id) DO NOTHING
        RETURNING *`,
-      [id, clauseId, clause.flow_down_required]
+      [id, clauseId, clauseDto.effective_flow_down_required]
     );
     if (!r.rows[0]) return res.status(409).json({ error: 'Clause already added' });
-    await logAudit('Solicitation', id, 'clause_added_manual', req.user?.id, { clauseId });
+    await logAudit('SolicitationClause', (r.rows[0] as { id: string }).id, 'clause_added', req.user?.id, { source: 'manual', clauseId });
     res.status(201).json(r.rows[0]);
   }
 );
@@ -263,12 +262,14 @@ router.post(
   authorize(['Level 1', 'Level 2', 'Level 3']),
   async (req, res) => {
     const { id } = req.params;
-    const blockers = await getApproveToBidBlockers(id);
-    if (!blockers.ok) {
+    const result = await getApproveToBidBlockers(id);
+    if (!result.canApprove) {
+      await logAudit('Solicitation', id, 'approve_to_bid_attempted', req.user?.id, { blocked: true, blockerCount: result.blockers.length });
       return res.status(400).json({
         error: 'Cannot approve to bid',
-        blockers: blockers.blockers,
-        hint: 'Complete clause extraction, risk assessments, required approvals, and generate a fresh Clause Risk Log'
+        canApprove: false,
+        blockers: result.blockers,
+        hint: 'Complete clause extraction, risk assessments, flowdown review, required approvals, and generate a fresh Clause Risk Log'
       });
     }
     await query(
@@ -276,7 +277,7 @@ router.post(
       [id]
     );
     await logAudit('Solicitation', id, 'approved_to_bid', req.user?.id);
-    res.json({ ok: true });
+    res.json({ ok: true, canApprove: true });
   }
 );
 
@@ -311,6 +312,23 @@ router.get('/:id/risk-log/latest', async (req, res) => {
   if (!r.rows[0]) return res.status(404).json({ error: 'No risk log found' });
   res.json(r.rows[0]);
 });
+
+// DELETE /api/solicitations/:id/clauses/:scId
+router.delete(
+  '/:id/clauses/:scId',
+  authorize(['Level 1', 'Level 2', 'Level 3', 'Level 4']),
+  async (req, res) => {
+    const { id, scId } = req.params;
+    const sc = (await query(
+      `SELECT id FROM solicitation_clauses WHERE solicitation_id = $1 AND id = $2`,
+      [id, scId]
+    )).rows[0];
+    if (!sc) return res.status(404).json({ error: 'Not found' });
+    await query(`DELETE FROM solicitation_clauses WHERE id = $1`, [scId]);
+    await logAudit('SolicitationClause', scId, 'clause_removed', req.user?.id);
+    res.status(204).send();
+  }
+);
 
 // GET /api/solicitations/:id/completeness
 router.get('/:id/completeness', async (req, res) => {

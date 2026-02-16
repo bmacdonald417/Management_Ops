@@ -2,21 +2,23 @@
  * Solicitation clause assessment and approval routes.
  * POST /api/solicitation-clauses/:id/assess
  * POST /api/solicitation-clauses/:id/approve
+ * Uses clauseService for base values, solicitationRiskEngine for scoring.
  */
 import { Router } from 'express';
 import { query } from '../db/connection.js';
 import { authenticate, authorize } from '../middleware/auth.js';
-import { assessClauseRisk, type RiskFactorScores } from '../services/solicitationRiskEngine.js';
+import { assessClauseRisk, getRiskModelConfig, type RiskFactorScores } from '../services/solicitationRiskEngine.js';
+import { getClauseWithOverlay } from '../services/clauseService.js';
 import { z } from 'zod';
 
 const router = Router();
 router.use(authenticate);
 
-function logAudit(entityType: string, entityId: string, action: string, actorId?: string) {
+function logAudit(entityType: string, entityId: string, action: string, actorId?: string, meta?: Record<string, unknown>) {
   return query(
-    `INSERT INTO governance_audit_events (entity_type, entity_id, action, actor_id)
-     VALUES ($1, $2, $3, $4)`,
-    [entityType, entityId, action, actorId]
+    `INSERT INTO governance_audit_events (entity_type, entity_id, action, field_name, old_value, new_value, actor_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [entityType, entityId, action, meta ? 'metadata' : null, null, meta ? JSON.stringify(meta) : null, actorId]
   ).catch((e) => console.error('Audit log failed:', e));
 }
 
@@ -26,6 +28,25 @@ function canApproveL4(role: string): boolean {
 function canApproveL3(role: string): boolean {
   return ['Level 1', 'Level 2', 'Level 3'].includes(role);
 }
+
+// GET /api/solicitation-clauses/:id — clause detail with base/effective values from clauseService
+router.get('/:id', async (req, res) => {
+  const scId = req.params.id;
+  const sc = (await query(
+    `SELECT sc.*, rc.clause_number, rc.title, rc.regulation_type, rc.risk_category FROM solicitation_clauses sc
+     JOIN regulatory_clauses rc ON sc.clause_id = rc.id WHERE sc.id = $1`,
+    [scId]
+  )).rows[0];
+  if (!sc) return res.status(404).json({ error: 'Not found' });
+  const clauseDto = await getClauseWithOverlay(sc.clause_id);
+  const baseRiskScore = clauseDto?.effective_risk_score ?? clauseDto?.base_risk_score ?? null;
+  res.json({
+    ...sc,
+    base_risk_score: baseRiskScore,
+    effective_risk_score: baseRiskScore,
+    flow_down_required: clauseDto?.effective_flow_down_required ?? sc.is_flow_down_required
+  });
+});
 
 // POST /api/solicitation-clauses/:id/assess
 router.post(
@@ -43,16 +64,21 @@ router.post(
       ip: z.number().min(0).max(5).optional(),
       rationale: z.string().optional(),
       recommendedMitigation: z.string().optional(),
-      requiresFlowDown: z.boolean().optional()
+      requiresFlowDown: z.boolean().optional(),
+      flowdownReviewCompleted: z.boolean().optional()
     }).parse(req.body);
 
     const sc = (await query(
-      `SELECT sc.*, rc.clause_number, rc.risk_category FROM solicitation_clauses sc
+      `SELECT sc.*, rc.clause_number, rc.risk_category, rc.id as clause_id FROM solicitation_clauses sc
        JOIN regulatory_clauses rc ON sc.clause_id = rc.id WHERE sc.id = $1`,
       [scId]
-    )).rows[0] as { solicitation_id: string; clause_number: string; risk_category: string } | undefined;
+    )).rows[0] as { solicitation_id: string; clause_number: string; risk_category: string; clause_id: string } | undefined;
     if (!sc) return res.status(404).json({ error: 'Not found' });
 
+    const clauseDto = await getClauseWithOverlay(sc.clause_id);
+    const baseRiskScore = clauseDto?.effective_risk_score ?? clauseDto?.base_risk_score ?? null;
+
+    const config = await getRiskModelConfig();
     const sol = (await query(`SELECT contract_type FROM solicitations WHERE id = $1`, [sc.solicitation_id])).rows[0] as { contract_type: string } | undefined;
     const scores: RiskFactorScores = {
       financial: body.financial ?? 2,
@@ -70,16 +96,22 @@ router.post(
       rationale: body.rationale,
       requiresFlowDown: body.requiresFlowDown ?? false,
       contractType: sol?.contract_type
-    });
+    }, config);
 
+    const assessedScore = result.riskScorePercent;
+    const effectiveScore = result.riskScorePercent;
     const autoApprove = result.approvalTierRequired === 'NONE';
     const status = autoApprove ? 'APPROVED' : 'SUBMITTED';
+    const flowdownComplete = body.flowdownReviewCompleted ?? (body.requiresFlowDown === false ? true : false);
+
     const r = await query(
       `INSERT INTO clause_risk_assessments (
         solicitation_clause_id, risk_level, risk_score_percent, risk_category,
-        rationale, recommended_mitigation, requires_flow_down, approval_tier_required,
+        rationale, recommended_mitigation, requires_flow_down, flowdown_review_completed,
+        base_risk_score, assessed_risk_score, effective_final_risk_score,
+        approval_tier_required,
         status, assessed_by_user_id, assessed_at, approved_by_user_id, approved_at, version
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), $11, $12, 1)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW(), $15, $16, 1)
       RETURNING *`,
       [
         scId,
@@ -89,6 +121,10 @@ router.post(
         body.rationale ?? result.rationale,
         body.recommendedMitigation ?? null,
         body.requiresFlowDown ?? false,
+        flowdownComplete,
+        baseRiskScore,
+        assessedScore,
+        effectiveScore,
         result.approvalTierRequired,
         status,
         req.user?.id,
@@ -96,7 +132,7 @@ router.post(
         autoApprove ? new Date() : null
       ]
     );
-    await logAudit('ClauseRiskAssessment', (r.rows[0] as { id: string }).id, 'submitted', req.user?.id);
+    await logAudit('ClauseRiskAssessment', (r.rows[0] as { id: string }).id, 'assessment_submitted', req.user?.id, { solicitation_clause_id: scId });
     res.status(201).json(r.rows[0]);
   }
 );
@@ -162,7 +198,7 @@ router.post(
       );
     }
 
-    await logAudit('ClauseRiskAssessment', latest.id, `approval_${status.toLowerCase()}`, req.user?.id);
+    await logAudit('ClauseRiskAssessment', latest.id, status === 'Approved' ? 'assessment_approved' : 'assessment_rejected', req.user?.id);
     res.json({ ok: true });
   }
 );

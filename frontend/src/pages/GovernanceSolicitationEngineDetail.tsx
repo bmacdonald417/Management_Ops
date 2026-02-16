@@ -33,12 +33,13 @@ interface Solicitation {
   approvals: { id: string; approval_type: string; status: string }[];
 }
 
-const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'extraction', label: 'Clause Extraction' },
-  { id: 'review', label: 'Clause Review' },
-  { id: 'approvals', label: 'Approvals' },
-  { id: 'risk-log', label: 'Clause Risk Log' }
+const STEPS = [
+  { id: 'intake', label: 'Intake' },
+  { id: 'clauses', label: 'Clauses' },
+  { id: 'assess', label: 'Assess' },
+  { id: 'review', label: 'Review' },
+  { id: 'approve', label: 'Approve-to-Bid' },
+  { id: 'risk-log', label: 'Risk Log' }
 ];
 
 function RiskBadgeL({ level }: { level: string }) {
@@ -49,14 +50,15 @@ function RiskBadgeL({ level }: { level: string }) {
 export default function GovernanceSolicitationEngineDetail() {
   const { id } = useParams();
   const [sol, setSol] = useState<Solicitation | null>(null);
-  const [tab, setTab] = useState(0);
+  const [step, setStep] = useState(0);
   const [pastedText, setPastedText] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [blockers, setBlockers] = useState<{ ok: boolean; blockers: string[] } | null>(null);
+  const [blockers, setBlockers] = useState<{ canApprove: boolean; blockers: { code: string; severity: string; message: string; remediation: string }[] } | null>(null);
   const [completeness, setCompleteness] = useState<{ percentComplete: number } | null>(null);
   const [riskLog, setRiskLog] = useState<Record<string, unknown> | null>(null);
   const [regulatoryClauses, setRegulatoryClauses] = useState<{ id: string; clause_number: string; title: string }[]>([]);
+  const [clauseSearch, setClauseSearch] = useState('');
 
   const load = () => {
     if (!id) return;
@@ -71,10 +73,10 @@ export default function GovernanceSolicitationEngineDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (id && tab === 4) {
+    if (id && step === 5) {
       client.get(`/solicitations/${id}/risk-log/latest`).then((r) => setRiskLog(r.data)).catch(() => setRiskLog(null));
     }
-  }, [id, tab]);
+  }, [id, step]);
 
   useEffect(() => {
     if (id) {
@@ -84,8 +86,9 @@ export default function GovernanceSolicitationEngineDetail() {
   }, [id, sol]);
 
   useEffect(() => {
-    client.get('/solicitations/clause-library?limit=100').then((r) => setRegulatoryClauses(r.data)).catch(() => []);
-  }, []);
+    const q = clauseSearch ? `&search=${encodeURIComponent(clauseSearch)}` : '';
+    client.get(`/solicitations/clause-library?limit=100${q}`).then((r) => setRegulatoryClauses(r.data)).catch(() => []);
+  }, [clauseSearch]);
 
   const handleExtract = async () => {
     if (!id) return;
@@ -96,6 +99,19 @@ export default function GovernanceSolicitationEngineDetail() {
       load();
     } catch (err) {
       alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Extract failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRemoveClause = async (scId: string) => {
+    if (!id || !confirm('Remove this clause from the solicitation?')) return;
+    setSubmitting(true);
+    try {
+      await client.delete(`/solicitations/${id}/clauses/${scId}`);
+      load();
+    } catch (err) {
+      alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Remove failed');
     } finally {
       setSubmitting(false);
     }
@@ -120,10 +136,11 @@ export default function GovernanceSolicitationEngineDetail() {
     try {
       await client.post(`/solicitations/${id}/approve-to-bid`);
       load();
-      if (blockers) setBlockers({ ...blockers, ok: true, blockers: [] });
+      if (blockers) setBlockers({ ...blockers, canApprove: true, blockers: [] });
     } catch (err) {
-      const data = (err as { response?: { data?: { blockers?: string[] } } })?.response?.data;
-      alert(data?.blockers?.join('\n') ?? (data as { error?: string })?.error ?? 'Approve failed');
+      const data = (err as { response?: { data?: { blockers?: { message: string }[]; error?: string } } })?.response?.data;
+      const msg = data?.blockers?.map((b) => b.message).join('\n') ?? data?.error ?? 'Approve failed';
+      alert(msg);
     } finally {
       setSubmitting(false);
     }
@@ -146,7 +163,7 @@ export default function GovernanceSolicitationEngineDetail() {
   if (loading || !sol) return <div className="text-slate-500">Loading...</div>;
 
   const hasL4 = sol.solicitation_clauses?.some((c) => c.risk_level === 'L4');
-  const canApprove = blockers?.ok ?? false;
+  const canApprove = blockers?.canApprove ?? false;
   const clauses = sol.solicitation_clauses ?? [];
 
   return (
@@ -171,7 +188,7 @@ export default function GovernanceSolicitationEngineDetail() {
           <button
             onClick={handleApproveToBid}
             disabled={!canApprove || submitting || sol.status === 'APPROVED_TO_BID'}
-            title={!canApprove && blockers ? blockers.blockers.join('; ') : ''}
+            title={!canApprove && blockers ? blockers.blockers.map((b) => b.message).join('; ') : ''}
             className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sol.status === 'APPROVED_TO_BID' ? 'Approved' : 'Approve to Bid'}
@@ -188,25 +205,36 @@ export default function GovernanceSolicitationEngineDetail() {
       {!canApprove && blockers && blockers.blockers.length > 0 && sol.status !== 'APPROVED_TO_BID' && (
         <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
           <div className="font-medium mb-1">Cannot approve to bid until:</div>
-          <ul className="list-disc list-inside">{blockers.blockers.map((b, i) => <li key={i}>{b}</li>)}</ul>
+          <ul className="list-disc list-inside space-y-1">
+            {blockers.blockers.map((b, i) => (
+              <li key={i}>
+                <span className="font-medium">{b.message}</span>
+                {b.remediation && <span className="text-amber-700"> — {b.remediation}</span>}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
-      <div className="flex gap-2 mb-6 border-b border-slate-200">
-        {TABS.map((t, i) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(i)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === i ? 'border-gov-blue text-gov-blue' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 overflow-x-auto pb-2">
+          {STEPS.map((s, i) => (
+            <span key={s.id} className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setStep(i)}
+                className={`px-3 py-2 text-sm font-medium rounded-lg whitespace-nowrap ${step === i ? 'bg-gov-blue text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                {i + 1}. {s.label}
+              </button>
+              {i < STEPS.length - 1 && <span className="text-slate-300">→</span>}
+            </span>
+          ))}
+        </div>
       </div>
 
-      {tab === 0 && (
+      {step === 0 && (
         <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="font-display font-semibold text-lg mb-4">Overview</h2>
+          <h2 className="font-display font-semibold text-lg mb-4">Intake</h2>
           <dl className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div><dt className="text-slate-500 text-sm">Agency</dt><dd>{sol.agency}</dd></div>
             <div><dt className="text-slate-500 text-sm">Contract Type</dt><dd>{sol.contract_type}</dd></div>
@@ -219,7 +247,7 @@ export default function GovernanceSolicitationEngineDetail() {
         </div>
       )}
 
-      {tab === 1 && (
+      {step === 1 && (
         <div className="space-y-4">
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="font-medium mb-2">Extract from Pasted Text</h3>
@@ -236,6 +264,13 @@ export default function GovernanceSolicitationEngineDetail() {
           </div>
           <div className="bg-white rounded-xl shadow p-6">
             <h3 className="font-medium mb-2">Add from Clause Library</h3>
+            <input
+              type="text"
+              placeholder="Search clause number or title…"
+              value={clauseSearch}
+              onChange={(e) => setClauseSearch(e.target.value)}
+              className="w-full mb-2 px-4 py-2 border border-slate-300 rounded-lg text-sm"
+            />
             <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
               {regulatoryClauses.slice(0, 50).map((rc) => (
                 <button
@@ -253,7 +288,7 @@ export default function GovernanceSolicitationEngineDetail() {
         </div>
       )}
 
-      {tab === 2 && (
+      {step === 2 && (
         <div className="bg-white rounded-xl shadow overflow-hidden">
           <h3 className="p-4 font-medium">Clause Review</h3>
           <table className="min-w-full divide-y divide-slate-200">
@@ -263,7 +298,7 @@ export default function GovernanceSolicitationEngineDetail() {
                 <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Title</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Risk</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Status</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Action</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-slate-500">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -277,7 +312,7 @@ export default function GovernanceSolicitationEngineDetail() {
                       {c.assessment_status ?? 'Not assessed'}
                     </span>
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-2 flex gap-3">
                     {!c.assessment_id ? (
                       <Link to={`/governance-engine/solicitations/${id}/engine/assess/${c.id}`} className="text-gov-blue hover:underline text-sm">
                         Assess
@@ -287,6 +322,14 @@ export default function GovernanceSolicitationEngineDetail() {
                         Approve
                       </Link>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveClause(c.id)}
+                      disabled={submitting}
+                      className="text-red-600 hover:underline text-sm disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -298,9 +341,9 @@ export default function GovernanceSolicitationEngineDetail() {
         </div>
       )}
 
-      {tab === 3 && (
+      {step === 3 && (
         <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="font-display font-semibold text-lg mb-4">Approvals</h2>
+          <h2 className="font-display font-semibold text-lg mb-4">Review</h2>
           <div className="space-y-3">
             {sol.approvals?.map((a) => (
               <div key={a.id} className="flex justify-between items-center py-2 border-b">
@@ -317,7 +360,41 @@ export default function GovernanceSolicitationEngineDetail() {
         </div>
       )}
 
-      {tab === 4 && (
+      {step === 4 && (
+        <div className="bg-white rounded-xl shadow p-6">
+          <h2 className="font-display font-semibold text-lg mb-4">Approve-to-Bid</h2>
+          {sol.status === 'APPROVED_TO_BID' ? (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 font-medium">
+              This solicitation has been approved to bid.
+            </div>
+          ) : (
+            <>
+              {!canApprove && blockers && blockers.blockers.length > 0 && (
+                <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+                  <div className="font-medium mb-2">Blockers</div>
+                  <ul className="space-y-1">
+                    {blockers.blockers.map((b, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="font-medium">{b.message}</span>
+                        <span className="text-amber-700">— {b.remediation}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <button
+                onClick={handleApproveToBid}
+                disabled={!canApprove || submitting}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? 'Processing…' : 'Approve to Bid'}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {step === 5 && (
         <div className="bg-white rounded-xl shadow p-6">
           <h2 className="font-display font-semibold text-lg mb-4">Clause Risk Log</h2>
           {riskLog ? (
@@ -335,7 +412,12 @@ export default function GovernanceSolicitationEngineDetail() {
           ) : (
             <p className="text-slate-500 mb-4">No risk log generated yet.</p>
           )}
-          <button onClick={handleGenerateRiskLog} disabled={submitting} className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium">
+          <button
+            onClick={handleGenerateRiskLog}
+            disabled={submitting || !canApprove}
+            title={!canApprove ? 'Complete all blockers before generating Risk Log' : ''}
+            className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             Generate Risk Log Snapshot
           </button>
         </div>

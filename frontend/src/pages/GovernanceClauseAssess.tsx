@@ -24,18 +24,28 @@ export default function GovernanceClauseAssess() {
   const [rationale, setRationale] = useState('');
   const [mitigation, setMitigation] = useState('');
   const [flowDown, setFlowDown] = useState(false);
-  const [clause, setClause] = useState<{ clause_number: string; title: string } | null>(null);
+  const [flowdownReviewCompleted, setFlowdownReviewCompleted] = useState(false);
+  const [clause, setClause] = useState<{ clause_number: string; title: string; base_risk_score?: number; effective_risk_score?: number; flow_down_required?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!id || !scId) return;
-    client.get(`/solicitations/${id}`).then((r) => {
-      const c = (r.data.solicitation_clauses ?? []).find((x: { id: string }) => x.id === scId);
-      if (c) setClause({ clause_number: c.clause_number, title: c.title });
+    if (!scId) return;
+    client.get(`/solicitation-clauses/${scId}`).then((r) => {
+      const c = r.data;
+      if (c) {
+        setClause({
+          clause_number: c.clause_number,
+          title: c.title,
+          base_risk_score: c.base_risk_score,
+          effective_risk_score: c.effective_risk_score,
+          flow_down_required: c.flow_down_required
+        });
+        setFlowDown(c.flow_down_required ?? false);
+      }
       setLoading(false);
-    });
-  }, [id, scId]);
+    }).catch(() => setLoading(false));
+  }, [scId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +56,8 @@ export default function GovernanceClauseAssess() {
         ...scores,
         rationale: rationale || undefined,
         recommendedMitigation: mitigation || undefined,
-        requiresFlowDown: flowDown
+        requiresFlowDown: flowDown,
+        flowdownReviewCompleted: flowDown ? flowdownReviewCompleted : true
       });
       navigate(`/governance-engine/solicitations/${id}/engine`, { replace: true });
     } catch (err) {
@@ -63,7 +74,14 @@ export default function GovernanceClauseAssess() {
       <Link to={`/governance-engine/solicitations/${id}/engine`} className="text-sm text-gov-blue hover:underline mb-4 inline-block">← Back</Link>
       <h1 className="font-display font-bold text-2xl text-gov-navy mb-2">Assess Clause Risk</h1>
       {clause && (
-        <p className="text-slate-500 mb-6">{clause.clause_number} — {clause.title}</p>
+        <div className="mb-6 space-y-1">
+          <p className="text-slate-500">{clause.clause_number} — {clause.title}</p>
+          {(clause.base_risk_score != null || clause.effective_risk_score != null) && (
+            <p className="text-sm text-slate-600">
+              Base risk score: {clause.base_risk_score ?? '—'} | Effective (canonical): {clause.effective_risk_score ?? '—'}
+            </p>
+          )}
+        </div>
       )}
       <form onSubmit={handleSubmit} className="max-w-xl space-y-4">
         {FACTORS.map((f) => (
@@ -92,6 +110,12 @@ export default function GovernanceClauseAssess() {
           <input type="checkbox" checked={flowDown} onChange={(e) => setFlowDown(e.target.checked)} />
           <span>Requires flow-down to subcontractors</span>
         </label>
+        {flowDown && (
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={flowdownReviewCompleted} onChange={(e) => setFlowdownReviewCompleted(e.target.checked)} />
+            <span>Flowdown Review completed</span>
+          </label>
+        )}
         <div className="flex gap-4 pt-4">
           <button type="submit" disabled={submitting} className="px-6 py-2 bg-gov-blue text-white rounded-lg font-medium">
             Submit Assessment

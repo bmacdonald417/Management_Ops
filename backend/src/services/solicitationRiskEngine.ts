@@ -1,7 +1,9 @@
 /**
  * Standardized risk scoring for solicitation clause review.
  * Weighted factors (0–5 each), L1–L4 mapping, hard stops, approval tiers.
+ * Config-driven via risk_model_config.
  */
+import { query } from '../db/connection.js';
 
 export const RISK_FACTORS = {
   financial: { weight: 0.25, label: 'Financial exposure' },
@@ -32,6 +34,29 @@ const DEFAULT_WEIGHTS: Record<keyof typeof RISK_FACTORS, number> = {
   insurance: 0.1,
   ip: 0.05
 };
+
+const DEFAULT_THRESHOLDS = { l2: 25, l3: 50, l4: 75 };
+
+let _weightsCache: Record<string, number> | null = null;
+let _thresholdsCache: { l2: number; l3: number; l4: number } | null = null;
+
+export async function getRiskModelConfig(): Promise<{ weights: Record<string, number>; thresholds: { l2: number; l3: number; l4: number } }> {
+  if (_weightsCache && _thresholdsCache) return { weights: _weightsCache, thresholds: _thresholdsCache };
+  try {
+    const r = await query(`SELECT config_key, config_value FROM risk_model_config WHERE config_key IN ('solicitation_weights', 'score_threshold_l2', 'score_threshold_l3', 'score_threshold_l4')`);
+    const rows = r.rows as { config_key: string; config_value: unknown }[];
+    const weights = (rows.find((x) => x.config_key === 'solicitation_weights')?.config_value as Record<string, number>) ?? DEFAULT_WEIGHTS;
+    _weightsCache = { ...DEFAULT_WEIGHTS, ...weights };
+    _thresholdsCache = {
+      l2: parseInt(String(rows.find((x) => x.config_key === 'score_threshold_l2')?.config_value ?? DEFAULT_THRESHOLDS.l2), 10),
+      l3: parseInt(String(rows.find((x) => x.config_key === 'score_threshold_l3')?.config_value ?? DEFAULT_THRESHOLDS.l3), 10),
+      l4: parseInt(String(rows.find((x) => x.config_key === 'score_threshold_l4')?.config_value ?? DEFAULT_THRESHOLDS.l4), 10)
+    };
+    return { weights: _weightsCache, thresholds: _thresholdsCache };
+  } catch {
+    return { weights: DEFAULT_WEIGHTS, thresholds: DEFAULT_THRESHOLDS };
+  }
+}
 
 const HARD_STOP_CLAUSES = [
   '252.204-7012', '252.204-7021', '52.249-2', '52.215-2',
@@ -76,11 +101,12 @@ function isUnlimitedIndemn(rationale: string): boolean {
   return new RegExp(UNLIMITED_INDEMN_PATTERNS.join('|'), 'i').test(rationale || '');
 }
 
-/** Map raw score (0–100) to L1–L4 */
-export function scoreToRiskLevel(score: number): RiskLevel {
-  if (score >= 75) return 'L4';
-  if (score >= 50) return 'L3';
-  if (score >= 25) return 'L2';
+/** Map raw score (0–100) to L1–L4. Uses config thresholds when provided. */
+export function scoreToRiskLevel(score: number, thresholds?: { l2: number; l3: number; l4: number }): RiskLevel {
+  const t = thresholds ?? DEFAULT_THRESHOLDS;
+  if (score >= t.l4) return 'L4';
+  if (score >= t.l3) return 'L3';
+  if (score >= t.l2) return 'L2';
   return 'L1';
 }
 
@@ -111,18 +137,27 @@ export function computeRiskScore(
   return Math.round(normalized * 100);
 }
 
+export interface AssessConfig {
+  weights?: Record<string, number>;
+  thresholds?: { l2: number; l3: number; l4: number };
+}
+
 /**
  * Full risk assessment with hard stops and overrides.
+ * Pass config from getRiskModelConfig() for config-driven scoring.
  */
-export function assessClauseRisk(params: {
-  clauseNumber: string;
-  scores: RiskFactorScores;
-  riskCategory: string;
-  rationale?: string;
-  recommendedMitigation?: string;
-  requiresFlowDown?: boolean;
-  contractType?: string;
-}): RiskResult {
+export function assessClauseRisk(
+  params: {
+    clauseNumber: string;
+    scores: RiskFactorScores;
+    riskCategory: string;
+    rationale?: string;
+    recommendedMitigation?: string;
+    requiresFlowDown?: boolean;
+    contractType?: string;
+  },
+  config?: AssessConfig
+): RiskResult {
   const {
     clauseNumber,
     scores,
@@ -132,8 +167,10 @@ export function assessClauseRisk(params: {
     contractType = ''
   } = params;
 
-  let score = Math.min(100, Math.max(0, computeRiskScore(scores)));
-  let level = scoreToRiskLevel(score);
+  const weights = config?.weights ?? DEFAULT_WEIGHTS;
+  const thresholds = config?.thresholds ?? DEFAULT_THRESHOLDS;
+  let score = Math.min(100, Math.max(0, computeRiskScore(scores, weights)));
+  let level = scoreToRiskLevel(score, thresholds);
   const reasons: string[] = [];
 
   // Hard stops
