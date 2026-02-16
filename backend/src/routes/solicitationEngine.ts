@@ -8,7 +8,17 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { extractClausesFromText } from '../services/clauseExtractor.js';
 import { searchClauses, getClauseByNumber, getClauseWithOverlay } from '../services/clauseService.js';
 import { getApproveToBidBlockers, generateRiskLogSnapshot } from '../services/workflowEngine.js';
+import { buildClauseAssessmentFormPayload } from '../services/clauseAssessmentFormBuilder.js';
+import {
+  qmsCreateFormRecord,
+  qmsUpdateFormRecord,
+  qmsFinalizeFormRecord,
+  qmsListFormRecords,
+  isQmsConfigured
+} from '../services/qmsClient.js';
 import { z } from 'zod';
+
+const QMS_TEMPLATE_CODE = process.env.QMS_TEMPLATE_CODE_FOR_CLAUSE_ASSESSMENT ?? 'MAC-FRM-013';
 
 const router = Router();
 router.use(authenticate);
@@ -111,6 +121,21 @@ router.get('/', async (req, res) => {
   sql += ' ORDER BY s.updated_at DESC';
   const r = await query(sql, params);
   res.json(r.rows);
+});
+
+// GET /api/solicitations/:id/form-records
+router.get('/:id/form-records', async (req, res) => {
+  const { id } = req.params;
+  const templateCode = (req.query.templateCode as string) ?? QMS_TEMPLATE_CODE;
+  if (!isQmsConfigured()) {
+    return res.json({ records: [], qmsConfigured: false });
+  }
+  const records = await qmsListFormRecords({
+    relatedEntityType: 'SOLICITATION',
+    relatedEntityId: id,
+    templateCode
+  });
+  res.json({ records, qmsConfigured: true });
 });
 
 // GET /api/solicitations/:id
@@ -311,6 +336,146 @@ router.get('/:id/risk-log/latest', async (req, res) => {
   );
   if (!r.rows[0]) return res.status(404).json({ error: 'No risk log found' });
   res.json(r.rows[0]);
+});
+
+// POST /api/solicitations/:id/clauses/:scId/form-record/save-draft
+router.post(
+  '/:id/clauses/:scId/form-record/save-draft',
+  authorize(['Level 1', 'Level 2', 'Level 3', 'Level 4']),
+  async (req, res) => {
+    const { id, scId } = req.params;
+    if (!isQmsConfigured()) {
+      return res.status(503).json({ error: 'QMS not configured', qmsConfigured: false });
+    }
+    const sc = (await query(
+      `SELECT id FROM solicitation_clauses WHERE solicitation_id = $1 AND id = $2`,
+      [id, scId]
+    )).rows[0];
+    if (!sc) return res.status(404).json({ error: 'Not found' });
+
+    const craRow = (await query(
+      `SELECT id FROM clause_risk_assessments WHERE solicitation_clause_id = $1 ORDER BY version DESC LIMIT 1`,
+      [scId]
+    )).rows[0] as { id: string } | undefined;
+    if (!craRow) return res.status(400).json({ error: 'No assessment exists for this clause. Assess the clause first.' });
+
+    const payload = await buildClauseAssessmentFormPayload(id, scId);
+    if (!payload) return res.status(404).json({ error: 'Could not build form payload' });
+
+    const linkRow = (await query(
+      `SELECT id, qms_form_record_id FROM clause_assessment_form_links WHERE clause_risk_assessment_id = $1`,
+      [craRow.id]
+    )).rows[0] as { id: string; qms_form_record_id: string } | undefined;
+
+    const payloadObj = payload as unknown as Record<string, unknown>;
+    let qmsFormRecordId: string;
+    if (linkRow) {
+      const updated = await qmsUpdateFormRecord(linkRow.qms_form_record_id, {
+        status: 'DRAFT',
+        payload: payloadObj,
+        relatedEntityType: 'SOLICITATION',
+        relatedEntityId: id
+      });
+      if (!updated) return res.status(502).json({ error: 'QMS update failed. Retry later.', qmsConfigured: true });
+      qmsFormRecordId = linkRow.qms_form_record_id;
+      await query(
+        `UPDATE clause_assessment_form_links SET updated_at = NOW() WHERE id = $1`,
+        [linkRow.id]
+      );
+    } else {
+      const created = await qmsCreateFormRecord({
+        templateCode: QMS_TEMPLATE_CODE,
+        status: 'DRAFT',
+        relatedEntityType: 'SOLICITATION',
+        relatedEntityId: id,
+        payload: payloadObj
+      });
+      if (!created) return res.status(502).json({ error: 'QMS create failed. Retry later.', qmsConfigured: true });
+      qmsFormRecordId = created.id;
+      await query(
+        `INSERT INTO clause_assessment_form_links (solicitation_id, solicitation_clause_id, clause_risk_assessment_id, qms_form_record_id, template_code, status)
+         VALUES ($1, $2, $3, $4, $5, 'DRAFT')`,
+        [id, scId, craRow.id, qmsFormRecordId, QMS_TEMPLATE_CODE]
+      );
+    }
+    await logAudit('ClauseAssessmentFormLink', qmsFormRecordId, 'qms_draft_saved', req.user?.id, { solicitationId: id, solicitationClauseId: scId });
+    res.json({ qmsFormRecordId, status: 'DRAFT' });
+  }
+);
+
+// POST /api/solicitations/:id/clauses/:scId/form-record/finalize
+router.post(
+  '/:id/clauses/:scId/form-record/finalize',
+  authorize(['Level 1', 'Level 2', 'Level 3', 'Level 4']),
+  async (req, res) => {
+    const { id, scId } = req.params;
+    if (!isQmsConfigured()) {
+      return res.status(503).json({ error: 'QMS not configured', qmsConfigured: false });
+    }
+    const sc = (await query(
+      `SELECT id FROM solicitation_clauses WHERE solicitation_id = $1 AND id = $2`,
+      [id, scId]
+    )).rows[0];
+    if (!sc) return res.status(404).json({ error: 'Not found' });
+
+    const craRow = (await query(
+      `SELECT id, status FROM clause_risk_assessments WHERE solicitation_clause_id = $1 ORDER BY version DESC LIMIT 1`,
+      [scId]
+    )).rows[0] as { id: string; status: string } | undefined;
+    if (!craRow) return res.status(400).json({ error: 'No assessment exists for this clause.' });
+    if (craRow.status !== 'APPROVED') {
+      return res.status(400).json({ error: 'Governance approvals must be complete before finalizing to QMS.' });
+    }
+
+    const linkRow = (await query(
+      `SELECT id, qms_form_record_id FROM clause_assessment_form_links WHERE clause_risk_assessment_id = $1`,
+      [craRow.id]
+    )).rows[0] as { id: string; qms_form_record_id: string } | undefined;
+    if (!linkRow) return res.status(400).json({ error: 'No QMS draft record. Save draft first.' });
+
+    const payload = await buildClauseAssessmentFormPayload(id, scId);
+    if (!payload) return res.status(404).json({ error: 'Could not build form payload' });
+
+    const approvalTrail = (payload.sections.approvals.approvalTrail as Array<{ step: string; actor: string; role?: string; timestamp: string; decision: string }>) ?? [];
+    const finalized = await qmsFinalizeFormRecord(linkRow.qms_form_record_id, {
+      approvalTrail,
+      payload: payload as unknown as Record<string, unknown>
+    });
+    if (!finalized) return res.status(502).json({ error: 'QMS finalize failed. Retry later.', qmsConfigured: true });
+
+    await query(
+      `UPDATE clause_assessment_form_links SET status = 'FINAL', updated_at = NOW() WHERE id = $1`,
+      [linkRow.id]
+    );
+    await logAudit('ClauseAssessmentFormLink', linkRow.qms_form_record_id, 'qms_finalized', req.user?.id, { solicitationId: id, solicitationClauseId: scId });
+    res.json({
+      qmsFormRecordId: finalized.id,
+      status: 'FINAL',
+      recordNumber: finalized.recordNumber,
+      pdfUrl: finalized.pdfUrl
+    });
+  }
+);
+
+// GET /api/solicitations/:id/clauses/:scId/form-record
+router.get('/:id/clauses/:scId/form-record', async (req, res) => {
+  const { id, scId } = req.params;
+  const linkRow = (await query(
+    `SELECT caf.* FROM clause_assessment_form_links caf
+     JOIN solicitation_clauses sc ON sc.id = caf.solicitation_clause_id
+     WHERE caf.solicitation_id = $1 AND caf.solicitation_clause_id = $2
+     ORDER BY caf.updated_at DESC LIMIT 1`,
+    [id, scId]
+  )).rows[0];
+  if (!linkRow) return res.json({ link: null, qmsConfigured: isQmsConfigured() });
+  res.json({
+    link: {
+      qmsFormRecordId: linkRow.qms_form_record_id,
+      status: linkRow.status,
+      templateCode: linkRow.template_code
+    },
+    qmsConfigured: isQmsConfigured()
+  });
 });
 
 // DELETE /api/solicitations/:id/clauses/:scId

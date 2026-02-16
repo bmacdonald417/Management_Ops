@@ -39,7 +39,8 @@ const STEPS = [
   { id: 'assess', label: 'Assess' },
   { id: 'review', label: 'Review' },
   { id: 'approve', label: 'Approve-to-Bid' },
-  { id: 'risk-log', label: 'Risk Log' }
+  { id: 'risk-log', label: 'Risk Log' },
+  { id: 'records', label: 'Records' }
 ];
 
 function RiskBadgeL({ level }: { level: string }) {
@@ -72,9 +73,17 @@ export default function GovernanceSolicitationEngineDetail() {
     load();
   }, [id]);
 
+  const [formRecords, setFormRecords] = useState<Array<Record<string, unknown>>>([]);
+
   useEffect(() => {
     if (id && step === 5) {
       client.get(`/solicitations/${id}/risk-log/latest`).then((r) => setRiskLog(r.data)).catch(() => setRiskLog(null));
+    }
+  }, [id, step]);
+
+  useEffect(() => {
+    if (id && step === 6) {
+      client.get(`/solicitations/${id}/form-records`).then((r) => setFormRecords(r.data.records ?? [])).catch(() => setFormRecords([]));
     }
   }, [id, step]);
 
@@ -342,7 +351,11 @@ export default function GovernanceSolicitationEngineDetail() {
                       <Link to={`/governance-engine/solicitations/${id}/engine/approve/${c.id}`} className="text-amber-600 hover:underline text-sm">
                         Approve
                       </Link>
-                    ) : null}
+                    ) : (
+                      <Link to={`/governance-engine/solicitations/${id}/engine/assess/${c.id}`} className="text-slate-600 hover:underline text-sm">
+                        Edit
+                      </Link>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleRemoveClause(c.id)}
@@ -411,6 +424,32 @@ export default function GovernanceSolicitationEngineDetail() {
                 {submitting ? 'Processing…' : 'Approve to Bid'}
               </button>
             </>
+          )}
+        </div>
+      )}
+
+      {step === 6 && (
+        <div className="bg-white rounded-xl shadow p-6">
+          <h2 className="font-display font-semibold text-lg mb-4">QMS Form Records</h2>
+          {formRecords.length === 0 ? (
+            <p className="text-slate-500">No form records saved to QMS yet. Save drafts or finalize from the clause assessment page.</p>
+          ) : (
+            <div className="space-y-3">
+              {formRecords.map((r: { id?: string; templateCode?: string; status?: string; recordNumber?: string; pdfUrl?: string }) => (
+                <div key={String(r.id ?? '')} className="p-4 border border-slate-200 rounded-lg flex justify-between items-center">
+                  <div>
+                    <span className="font-medium">{r.templateCode ?? 'MAC-FRM-013'}</span>
+                    <span className="ml-2 text-slate-600">— {String(r.status ?? '')}</span>
+                    {r.recordNumber && <span className="ml-2 text-gov-blue">#{r.recordNumber}</span>}
+                  </div>
+                  {r.pdfUrl && (
+                    <a href={r.pdfUrl} target="_blank" rel="noopener noreferrer" className="text-gov-blue hover:underline text-sm">
+                      Download PDF
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

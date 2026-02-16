@@ -32,6 +32,17 @@ export default function GovernanceClauseAssess() {
   const [clause, setClause] = useState<{ clause_number: string; title: string; base_risk_score?: number; effective_risk_score?: number; flow_down_required?: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [assessmentExists, setAssessmentExists] = useState(false);
+  const [qmsLink, setQmsLink] = useState<{ qmsFormRecordId: string; status: string } | null>(null);
+  const [qmsConfigured, setQmsConfigured] = useState(true);
+
+  const loadFormRecord = () => {
+    if (!id || !scId) return;
+    client.get(`/solicitations/${id}/clauses/${scId}/form-record`).then((r) => {
+      setQmsLink(r.data.link);
+      setQmsConfigured(r.data.qmsConfigured !== false);
+    }).catch(() => setQmsConfigured(false));
+  };
 
   useEffect(() => {
     if (!scId) return;
@@ -49,7 +60,20 @@ export default function GovernanceClauseAssess() {
       }
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [scId]);
+    if (id) loadFormRecord();
+  }, [scId, id]);
+
+  const [assessmentApproved, setAssessmentApproved] = useState(false);
+
+  useEffect(() => {
+    if (id && scId) {
+      client.get(`/solicitations/${id}`).then((r) => {
+        const c = (r.data.solicitation_clauses ?? []).find((x: { id: string }) => x.id === scId);
+        setAssessmentExists(!!c?.assessment_id);
+        setAssessmentApproved(c?.assessment_status === 'APPROVED');
+      }).catch(() => {});
+    }
+  }, [id, scId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,9 +87,44 @@ export default function GovernanceClauseAssess() {
         requiresFlowDown: flowDown,
         flowdownReviewCompleted: flowDown ? flowdownReviewCompleted : true
       });
+      setAssessmentExists(true);
+      loadFormRecord();
       navigate(`/governance-engine/solicitations/${id}/engine`, { replace: true });
     } catch (err) {
       alert((err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Assessment failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSaveDraftToQms = async () => {
+    if (!id || !scId) return;
+    setSubmitting(true);
+    try {
+      const r = await client.post(`/solicitations/${id}/clauses/${scId}/form-record/save-draft`);
+      setQmsLink({ qmsFormRecordId: r.data.qmsFormRecordId, status: r.data.status });
+    } catch (err) {
+      const data = (err as { response?: { data?: { error?: string; qmsConfigured?: boolean } } })?.response?.data;
+      alert(data?.error ?? 'Save to QMS failed');
+      if (data?.qmsConfigured === false) setQmsConfigured(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const [finalizeResult, setFinalizeResult] = useState<{ recordNumber?: string; pdfUrl?: string } | null>(null);
+
+  const handleFinalizeToQms = async () => {
+    if (!id || !scId) return;
+    setSubmitting(true);
+    setFinalizeResult(null);
+    try {
+      const r = await client.post(`/solicitations/${id}/clauses/${scId}/form-record/finalize`);
+      setQmsLink({ qmsFormRecordId: r.data.qmsFormRecordId, status: r.data.status });
+      setFinalizeResult({ recordNumber: r.data.recordNumber, pdfUrl: r.data.pdfUrl });
+    } catch (err) {
+      const data = (err as { response?: { data?: { error?: string } } })?.response?.data;
+      alert(data?.error ?? 'Finalize to QMS failed');
     } finally {
       setSubmitting(false);
     }
@@ -128,14 +187,49 @@ export default function GovernanceClauseAssess() {
             <span>Flowdown Review completed</span>
           </label>
         )}
-        <div className="flex gap-4 pt-4">
+        <div className="flex gap-4 pt-4 flex-wrap">
           <button type="submit" disabled={submitting} className="px-6 py-2 bg-gov-blue text-white rounded-lg font-medium">
             Submit Assessment
           </button>
           <button type="button" onClick={() => navigate(-1)} className="px-6 py-2 border border-slate-300 rounded-lg">
             Cancel
           </button>
+          {qmsConfigured && assessmentExists && (
+            <>
+              <button
+                type="button"
+                onClick={handleSaveDraftToQms}
+                disabled={submitting}
+                className="px-4 py-2 border border-slate-400 rounded-lg text-sm hover:bg-slate-50"
+              >
+                Save Draft to QMS
+              </button>
+              <button
+                type="button"
+                onClick={handleFinalizeToQms}
+                disabled={submitting || !assessmentApproved}
+                title={!assessmentApproved ? 'Complete governance approvals first' : ''}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+              >
+                Finalize &amp; Archive to QMS
+              </button>
+            </>
+          )}
         </div>
+        {!qmsConfigured && assessmentExists && (
+          <p className="mt-2 text-sm text-amber-700">Not synced to QMS yet. Configure QMS_BASE_URL and QMS_INTEGRATION_KEY.</p>
+        )}
+        {qmsLink && (
+          <p className="mt-2 text-sm text-slate-600">
+            QMS: {qmsLink.status === 'FINAL' ? 'Finalized' : 'Draft saved'}
+            {finalizeResult?.recordNumber && ` — Record #${finalizeResult.recordNumber}`}
+            {finalizeResult?.pdfUrl && (
+              <a href={finalizeResult.pdfUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-gov-blue hover:underline">
+                View PDF
+              </a>
+            )}
+          </p>
+        )}
       </form>
       <CopilotDrawer
         open={copilotOpen}
