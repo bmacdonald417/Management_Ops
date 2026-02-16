@@ -49,6 +49,8 @@ interface CopilotDrawerProps {
   };
   onApplyClauseEnrich?: (clauseId: string, data: Record<string, unknown>) => void;
   onApplyScoreAssist?: (updates: { clauseEntryId: string; [k: string]: unknown }[]) => void;
+  /** Apply CLAUSE_ENRICH result to risk assessment form (scores, mitigation, flowDown, rationale) */
+  onApplyToAssessmentForm?: (data: { scores: Record<string, number>; mitigation: string; flowDown: boolean; rationale: string }) => void;
   userRole?: string;
 }
 
@@ -66,6 +68,7 @@ export default function CopilotDrawer({
   context = {},
   onApplyClauseEnrich,
   onApplyScoreAssist,
+  onApplyToAssessmentForm,
   userRole = ''
 }: CopilotDrawerProps) {
   const [mode, setMode] = useState<CopilotMode>('CLAUSE_ENRICH');
@@ -336,6 +339,33 @@ export default function CopilotDrawer({
                       className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium disabled:opacity-50"
                     >
                       {applying ? 'Applying...' : 'Apply to Clause'}
+                    </button>
+                  )}
+                  {mode === 'CLAUSE_ENRICH' && (context.clauseNumber || context.clauseId) && onApplyToAssessmentForm && res && (
+                    <button
+                      onClick={() => {
+                        const ds = res.defaultScores as { financial?: number; cyber?: number; liability?: number; regulatory?: number; performance?: number } | undefined;
+                        const scores: Record<string, number> = {
+                          financial: Math.min(5, Math.max(0, ds?.financial ?? 2)),
+                          schedule: Math.min(5, Math.max(0, ds?.performance ?? 2)),
+                          audit: Math.min(5, Math.max(0, ds?.regulatory ?? 2)),
+                          cyber: Math.min(5, Math.max(0, ds?.cyber ?? 2)),
+                          flowDown: 2,
+                          insurance: Math.min(5, Math.max(0, ds?.liability ?? 2)),
+                          ip: 2
+                        };
+                        onApplyToAssessmentForm({
+                          scores,
+                          mitigation: String(res.mitigationStrategy ?? ''),
+                          flowDown: String(res.flowDown ?? '').toUpperCase() === 'YES',
+                          rationale: String(res.notes ?? '')
+                        });
+                        setResult(null);
+                        onClose();
+                      }}
+                      className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium"
+                    >
+                      Apply to Assessment Form
                     </button>
                   )}
                   {mode === 'PREBID_SCORE_ASSIST' && Array.isArray(res.updates) && res.updates.length > 0 && canApplyScores && (

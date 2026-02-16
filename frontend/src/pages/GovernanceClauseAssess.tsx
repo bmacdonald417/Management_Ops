@@ -3,7 +3,9 @@
  */
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import client from '../api/client';
+import CopilotDrawer from '../components/governance/CopilotDrawer';
 
 const FACTORS = [
   { key: 'financial', label: 'Financial exposure' },
@@ -18,6 +20,8 @@ const FACTORS = [
 export default function GovernanceClauseAssess() {
   const { id, scId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [scores, setScores] = useState<Record<string, number>>(
     Object.fromEntries(FACTORS.map((f) => [f.key, 2]))
   );
@@ -71,7 +75,15 @@ export default function GovernanceClauseAssess() {
 
   return (
     <div>
-      <Link to={`/governance-engine/solicitations/${id}/engine`} className="text-sm text-gov-blue hover:underline mb-4 inline-block">← Back</Link>
+      <div className="flex justify-between items-start mb-4">
+        <Link to={`/governance-engine/solicitations/${id}/engine`} className="text-sm text-gov-blue hover:underline">← Back</Link>
+        <button
+          onClick={() => setCopilotOpen(true)}
+          className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium hover:bg-gov-blue/90"
+        >
+          AI Copilot
+        </button>
+      </div>
       <h1 className="font-display font-bold text-2xl text-gov-navy mb-2">Assess Clause Risk</h1>
       {clause && (
         <div className="mb-6 space-y-1">
@@ -125,6 +137,18 @@ export default function GovernanceClauseAssess() {
           </button>
         </div>
       </form>
+      <CopilotDrawer
+        open={copilotOpen}
+        onClose={() => setCopilotOpen(false)}
+        context={{ clauseNumber: clause?.clause_number, solicitationId: id }}
+        userRole={user?.role}
+        onApplyToAssessmentForm={(data) => {
+          setScores(data.scores);
+          setMitigation(data.mitigation);
+          setFlowDown(data.flowDown);
+          setRationale(data.rationale);
+        }}
+      />
     </div>
   );
 }
