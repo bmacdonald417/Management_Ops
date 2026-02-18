@@ -17,6 +17,7 @@ import GovernanceClauseApprove from './pages/GovernanceClauseApprove';
 import GovernanceSolicitationEngineNew from './pages/GovernanceSolicitationEngineNew';
 import GovernanceClauseLibrary from './pages/GovernanceClauseLibrary';
 import GovernanceReports from './pages/GovernanceReports';
+import GovernanceSignatureRequests from './pages/GovernanceSignatureRequests';
 import GovernanceAuditTrail from './pages/GovernanceAuditTrail';
 import GovernancePacketExport from './pages/GovernancePacketExport';
 import GovernanceMaturity from './pages/GovernanceMaturity';
@@ -72,6 +73,7 @@ function AppRoutes() {
         <Route path="governance-engine/auto-builder/evidence" element={<GovernanceAutoBuilderEvidence />} />
         <Route path="governance-engine/auto-builder/appendices" element={<GovernanceAutoBuilderAppendices />} />
         <Route path="governance-engine/reports" element={<GovernanceReports />} />
+        <Route path="governance-engine/signature-requests" element={<GovernanceSignatureRequests />} />
         <Route path="admin/compliance-registry" element={<AdminComplianceRegistry />} />
         <Route path="admin/regulatory-library" element={<AdminRegulatoryLibrary />} />
         <Route path="admin/ai-settings" element={<AdminAISettings />} />

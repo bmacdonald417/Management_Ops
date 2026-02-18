@@ -21,7 +21,8 @@ const governanceSubNav = [
   { path: '/governance-engine/auto-builder', label: 'Auto-Builder' },
   { path: '/governance-engine/copilot', label: 'Copilot' },
   { path: '/governance-engine/maturity', label: 'Maturity' },
-  { path: '/governance-engine/reports', label: 'Reports' }
+  { path: '/governance-engine/reports', label: 'Reports' },
+  { path: '/governance-engine/signature-requests', label: 'Signature Requests' }
 ];
 
 export default function Layout() {
