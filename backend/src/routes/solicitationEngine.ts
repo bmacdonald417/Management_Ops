@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { query } from '../db/connection.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { extractClausesFromText } from '../services/clauseExtractor.js';
-import { searchClauses, getClauseByNumber, getClauseWithOverlay } from '../services/clauseService.js';
+import { searchClauses, getClauseByNumber, getClauseWithOverlay, getUnifiedClauseMasterId, getRegulatoryClauseId } from '../services/clauseService.js';
 import { getApproveToBidBlockers, generateRiskLogSnapshot } from '../services/workflowEngine.js';
 import { buildClauseAssessmentFormPayload } from '../services/clauseAssessmentFormBuilder.js';
 import {
@@ -148,15 +148,21 @@ router.get('/:id', async (req, res) => {
   if (!sol) return res.status(404).json({ error: 'Not found' });
 
   const clauses = await query(
-    `SELECT sc.*, rc.clause_number, rc.title, rc.regulation_type, rc.risk_category, rc.flow_down_required,
-      cra.id as assessment_id, cra.risk_level, cra.risk_score_percent, cra.status as assessment_status,
-      cra.approval_tier_required
+    `SELECT sc.*,
+       COALESCE(u.clause_number, rc.clause_number) AS clause_number,
+       COALESCE(u.title, rc.title) AS title,
+       COALESCE(u.regulation, rc.regulation_type) AS regulation_type,
+       COALESCE(u.risk_category, u.override_risk_category, rc.risk_category) AS risk_category,
+       COALESCE(u.is_flow_down, rc.flow_down_required) AS flow_down_required,
+       cra.id AS assessment_id, cra.risk_level, cra.risk_score_percent, cra.status AS assessment_status,
+       cra.approval_tier_required
      FROM solicitation_clauses sc
-     JOIN regulatory_clauses rc ON sc.clause_id = rc.id
+     LEFT JOIN unified_clause_master u ON sc.unified_clause_master_id = u.id
+     LEFT JOIN regulatory_clauses rc ON sc.clause_id = rc.id
      LEFT JOIN clause_risk_assessments cra ON cra.solicitation_clause_id = sc.id AND cra.id = (
        SELECT id FROM clause_risk_assessments WHERE solicitation_clause_id = sc.id ORDER BY version DESC LIMIT 1
      )
-     WHERE sc.solicitation_id = $1`,
+     WHERE sc.solicitation_id = $1 AND (u.id IS NOT NULL OR rc.id IS NOT NULL)`,
     [id]
   );
 
@@ -229,13 +235,17 @@ router.post(
       const clauseDto = await getClauseByNumber(e.regulationType, e.clauseNumber);
       if (!clauseDto) continue;
 
+      const regulatoryId = await getRegulatoryClauseId(e.regulationType, e.clauseNumber);
+      if (!regulatoryId) continue;
+      const unifiedId = await getUnifiedClauseMasterId(e.regulationType, e.clauseNumber);
+
       try {
         const ins = await query(
-          `INSERT INTO solicitation_clauses (solicitation_id, clause_id, detected_from, detected_confidence, is_flow_down_required)
-           VALUES ($1, $2, 'PASTED_TEXT', 0.9, $3)
+          `INSERT INTO solicitation_clauses (solicitation_id, clause_id, unified_clause_master_id, detected_from, detected_confidence, is_flow_down_required)
+           VALUES ($1, $2, $3, 'PASTED_TEXT', 0.9, $4)
            ON CONFLICT (solicitation_id, clause_id) DO NOTHING
            RETURNING *`,
-          [id, clauseDto.id, clauseDto.effective_flow_down_required]
+          [id, regulatoryId, unifiedId, clauseDto.effective_flow_down_required]
         );
         if (ins.rows[0]) {
           added.push(ins.rows[0]);
@@ -268,12 +278,16 @@ router.post(
     const clauseDto = await getClauseWithOverlay(clauseId);
     if (!clauseDto) return res.status(404).json({ error: 'Clause not found' });
 
+    const regulatoryId = await getRegulatoryClauseId(clauseDto.regulation_type as 'FAR' | 'DFARS', clauseDto.clause_number);
+    if (!regulatoryId) return res.status(400).json({ error: 'Clause not in regulatory library; cannot add to solicitation' });
+    const unifiedId = await getUnifiedClauseMasterId(clauseDto.regulation_type as 'FAR' | 'DFARS', clauseDto.clause_number);
+
     const r = await query(
-      `INSERT INTO solicitation_clauses (solicitation_id, clause_id, detected_from, is_flow_down_required)
-       VALUES ($1, $2, 'MANUAL_ADD', $3)
+      `INSERT INTO solicitation_clauses (solicitation_id, clause_id, unified_clause_master_id, detected_from, is_flow_down_required)
+       VALUES ($1, $2, $3, 'MANUAL_ADD', $4)
        ON CONFLICT (solicitation_id, clause_id) DO NOTHING
        RETURNING *`,
-      [id, clauseId, clauseDto.effective_flow_down_required]
+      [id, regulatoryId, unifiedId, clauseDto.effective_flow_down_required]
     );
     if (!r.rows[0]) return res.status(409).json({ error: 'Clause already added' });
     await logAudit('SolicitationClause', (r.rows[0] as { id: string }).id, 'clause_added', req.user?.id, { source: 'manual', clauseId });

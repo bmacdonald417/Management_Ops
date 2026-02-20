@@ -108,6 +108,7 @@ async function upsertRegulatoryClause(row: {
         row.flowDownRequired,
       ]
     );
+    await upsertUnifiedClauseMaster(row);
     return { id: existing.id, isNew: false };
   }
 
@@ -130,7 +131,45 @@ async function upsertRegulatoryClause(row: {
       row.flowDownRequired,
     ]
   )).rows[0] as { id: string };
+  await upsertUnifiedClauseMaster(row);
   return { id: r.id, isNew: true };
+}
+
+async function upsertUnifiedClauseMaster(row: {
+  regulationType: string;
+  clauseNumber: string;
+  title: string;
+  fullText: string;
+  subpart: string | null;
+  hierarchyLevel: number | null;
+  riskCategory: string;
+  riskScore: number;
+  flowDownRequired: boolean;
+  part: string;
+}): Promise<void> {
+  await query(
+    `INSERT INTO unified_clause_master (
+      clause_number, title, full_text, regulation, part, subpart, hierarchy_level,
+      risk_category, risk_score, is_flow_down, source
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ingestRegulations')
+    ON CONFLICT (regulation, clause_number) DO UPDATE SET
+      title = EXCLUDED.title, full_text = EXCLUDED.full_text, part = EXCLUDED.part,
+      subpart = EXCLUDED.subpart, hierarchy_level = EXCLUDED.hierarchy_level,
+      risk_category = EXCLUDED.risk_category, risk_score = EXCLUDED.risk_score,
+      is_flow_down = EXCLUDED.is_flow_down, updated_at = NOW()`,
+    [
+      row.clauseNumber,
+      row.title,
+      row.fullText,
+      row.regulationType,
+      row.part,
+      row.subpart,
+      row.hierarchyLevel,
+      row.riskCategory,
+      row.riskScore,
+      row.flowDownRequired
+    ]
+  ).catch((err) => console.warn('[ingestRegulations] unified_clause_master upsert skipped (table may not exist):', (err as Error).message));
 }
 
 async function ensureGovernanceRequirement(clauseId: string, weight: number): Promise<void> {

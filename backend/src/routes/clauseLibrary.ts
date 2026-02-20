@@ -148,6 +148,34 @@ router.post(
       [body.regulation_type, num]
     )).rows[0] as { id: string; title: string };
 
+    // Prefer unified_clause_master when present (Phase 1)
+    const unified = (await query(
+      `SELECT id FROM unified_clause_master WHERE regulation = $1 AND clause_number = $2`,
+      [body.regulation_type, num]
+    )).rows[0] as { id: string } | undefined;
+    if (unified) {
+      await query(
+        `UPDATE unified_clause_master SET
+          override_risk_category = $2, override_risk_score = $3, override_flow_down_required = $4,
+          override_suggested_mitigation = $5, overlay_tags = $6::jsonb, overlay_notes = $7, flow_down_notes = $8,
+          updated_by_id = $9, updated_at = NOW()
+         WHERE id = $1`,
+        [
+          unified.id,
+          body.override_risk_category ?? null,
+          body.override_risk_score ?? null,
+          body.override_flow_down_required ?? null,
+          body.override_suggested_mitigation ?? null,
+          JSON.stringify(body.tags ?? []),
+          body.notes ?? null,
+          body.flow_down_notes ?? null,
+          req.user?.id
+        ]
+      );
+      const merged = await getClauseByNumber(body.regulation_type, num);
+      return res.status(201).json(merged);
+    }
+
     const r = await query(
       `INSERT INTO clause_library_items (
         clause_number, regulation_type, title, type,
@@ -188,12 +216,38 @@ router.post(
   }
 );
 
-// PUT /library/overrides/:id - Update overlay
+// PUT /library/overrides/:id - Update overlay (unified_clause_master or clause_library_items)
 router.put(
   '/library/overrides/:id',
   authorize(['Level 1', 'Level 3']),
   async (req, res) => {
     const { id } = req.params;
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+    // Prefer update on unified_clause_master when id is a unified row
+    const unified = isUuid ? (await query('SELECT id, regulation, clause_number FROM unified_clause_master WHERE id = $1', [id])).rows[0] as { id: string; regulation: string; clause_number: string } | undefined : undefined;
+    if (unified) {
+      const body = req.body;
+      const updates: string[] = [];
+      const values: unknown[] = [unified.id];
+      let i = 2;
+      if (body.override_risk_category !== undefined) { updates.push(`override_risk_category = $${i++}`); values.push(body.override_risk_category); }
+      if (body.override_risk_score !== undefined) { updates.push(`override_risk_score = $${i++}`); values.push(body.override_risk_score); }
+      if (body.override_flow_down_required !== undefined) { updates.push(`override_flow_down_required = $${i++}`); values.push(body.override_flow_down_required); }
+      if (body.override_suggested_mitigation !== undefined) { updates.push(`override_suggested_mitigation = $${i++}`); values.push(body.override_suggested_mitigation); }
+      if (body.tags !== undefined) { updates.push(`overlay_tags = $${i++}::jsonb`); values.push(JSON.stringify(Array.isArray(body.tags) ? body.tags : [])); }
+      if (body.notes !== undefined) { updates.push(`overlay_notes = $${i++}`); values.push(body.notes); }
+      if (body.flow_down_notes !== undefined) { updates.push(`flow_down_notes = $${i++}`); values.push(body.flow_down_notes); }
+      if (updates.length > 0) {
+        updates.push('updated_at = NOW()', `updated_by_id = $${i++}`);
+        values.push(req.user?.id);
+        await query(`UPDATE unified_clause_master SET ${updates.join(', ')} WHERE id = $1`, values);
+        await logAudit('ClauseOverlay', id, 'updated', req.user?.id);
+      }
+      const merged = await getClauseByNumber(unified.regulation as RegulationType, unified.clause_number);
+      return res.json(merged);
+    }
+
     const existing = (await query('SELECT * FROM clause_library_items WHERE id = $1', [id])).rows[0] as Record<string, unknown> | undefined;
     if (!existing) return res.status(404).json({ error: 'Overlay not found' });
 

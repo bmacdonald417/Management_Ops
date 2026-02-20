@@ -33,12 +33,20 @@ function canApproveL3(role: string): boolean {
 router.get('/:id', async (req, res) => {
   const scId = req.params.id;
   const sc = (await query(
-    `SELECT sc.*, rc.clause_number, rc.title, rc.regulation_type, rc.risk_category FROM solicitation_clauses sc
-     JOIN regulatory_clauses rc ON sc.clause_id = rc.id WHERE sc.id = $1`,
+    `SELECT sc.*,
+       COALESCE(u.clause_number, rc.clause_number) AS clause_number,
+       COALESCE(u.title, rc.title) AS title,
+       COALESCE(u.regulation, rc.regulation_type) AS regulation_type,
+       COALESCE(u.risk_category, u.override_risk_category, rc.risk_category) AS risk_category
+     FROM solicitation_clauses sc
+     LEFT JOIN unified_clause_master u ON sc.unified_clause_master_id = u.id
+     LEFT JOIN regulatory_clauses rc ON sc.clause_id = rc.id
+     WHERE sc.id = $1 AND (u.id IS NOT NULL OR rc.id IS NOT NULL)`,
     [scId]
   )).rows[0];
   if (!sc) return res.status(404).json({ error: 'Not found' });
-  const clauseDto = await getClauseWithOverlay(sc.clause_id);
+  const clauseRef = (sc as { unified_clause_master_id?: string; clause_id: string }).unified_clause_master_id ?? (sc as { clause_id: string }).clause_id;
+  const clauseDto = await getClauseWithOverlay(clauseRef);
   const baseRiskScore = clauseDto?.effective_risk_score ?? clauseDto?.base_risk_score ?? null;
   res.json({
     ...sc,
@@ -69,8 +77,14 @@ router.post(
     }).parse(req.body);
 
     const sc = (await query(
-      `SELECT sc.*, rc.clause_number, rc.risk_category, rc.id as clause_id FROM solicitation_clauses sc
-       JOIN regulatory_clauses rc ON sc.clause_id = rc.id WHERE sc.id = $1`,
+      `SELECT sc.*,
+         COALESCE(u.clause_number, rc.clause_number) AS clause_number,
+         COALESCE(u.risk_category, u.override_risk_category, rc.risk_category) AS risk_category,
+         COALESCE(sc.unified_clause_master_id, rc.id) AS clause_id
+       FROM solicitation_clauses sc
+       LEFT JOIN unified_clause_master u ON sc.unified_clause_master_id = u.id
+       LEFT JOIN regulatory_clauses rc ON sc.clause_id = rc.id
+       WHERE sc.id = $1 AND (u.id IS NOT NULL OR rc.id IS NOT NULL)`,
       [scId]
     )).rows[0] as { solicitation_id: string; clause_number: string; risk_category: string; clause_id: string } | undefined;
     if (!sc) return res.status(404).json({ error: 'Not found' });
@@ -149,8 +163,10 @@ router.post(
     }).parse(req.body);
 
     const sc = (await query(
-      `SELECT sc.*, rc.clause_number FROM solicitation_clauses sc
-       JOIN regulatory_clauses rc ON sc.clause_id = rc.id WHERE sc.id = $1`,
+      `SELECT sc.* FROM solicitation_clauses sc
+       LEFT JOIN unified_clause_master u ON sc.unified_clause_master_id = u.id
+       LEFT JOIN regulatory_clauses rc ON sc.clause_id = rc.id
+       WHERE sc.id = $1 AND (u.id IS NOT NULL OR rc.id IS NOT NULL)`,
       [scId]
     )).rows[0] as { solicitation_id: string } | undefined;
     if (!sc) return res.status(404).json({ error: 'Not found' });

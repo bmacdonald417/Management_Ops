@@ -36,15 +36,22 @@ export async function buildClauseAssessmentFormPayload(
   if (!sol) return null;
 
   const scRow = (await query(
-    `SELECT sc.*, rc.clause_number, rc.title, rc.regulation_type, rc.risk_category, rc.id as clause_id
-     FROM solicitation_clauses sc JOIN regulatory_clauses rc ON sc.clause_id = rc.id
-     WHERE sc.id = $1 AND sc.solicitation_id = $2`,
+    `SELECT sc.*,
+       COALESCE(u.clause_number, rc.clause_number) AS clause_number,
+       COALESCE(u.title, rc.title) AS title,
+       COALESCE(u.regulation, rc.regulation_type) AS regulation_type,
+       COALESCE(u.risk_category, u.override_risk_category, rc.risk_category) AS risk_category,
+       COALESCE(sc.unified_clause_master_id, rc.id) AS clause_id
+     FROM solicitation_clauses sc
+     LEFT JOIN unified_clause_master u ON sc.unified_clause_master_id = u.id
+     LEFT JOIN regulatory_clauses rc ON sc.clause_id = rc.id
+     WHERE sc.id = $1 AND sc.solicitation_id = $2 AND (u.id IS NOT NULL OR rc.id IS NOT NULL)`,
     [solicitationClauseId, solicitationId]
   )).rows[0] as Record<string, unknown> | undefined;
   if (!scRow) return null;
 
-  const clauseId = scRow.clause_id as string;
-  const clauseDto = await getClauseWithOverlay(clauseId);
+  const clauseRef = (scRow.unified_clause_master_id ?? scRow.clause_id) as string;
+  const clauseDto = await getClauseWithOverlay(clauseRef);
 
   const craRow = (await query(
     `SELECT * FROM clause_risk_assessments

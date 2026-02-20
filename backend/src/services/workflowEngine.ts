@@ -30,14 +30,18 @@ export async function getApproveToBidBlockers(solicitationId: string): Promise<A
 
   const blockers: BlockerItem[] = [];
   const clauses = (await query(
-    `SELECT sc.id, sc.is_flow_down_required, rc.clause_number, cra.status as assessment_status, cra.risk_level, cra.flowdown_review_completed
+    `SELECT sc.id,
+       COALESCE(u.is_flow_down, sc.is_flow_down_required) AS is_flow_down_required,
+       COALESCE(u.clause_number, rc.clause_number) AS clause_number,
+       cra.status AS assessment_status, cra.risk_level, cra.flowdown_review_completed
      FROM solicitation_clauses sc
-     JOIN regulatory_clauses rc ON sc.clause_id = rc.id
+     LEFT JOIN unified_clause_master u ON sc.unified_clause_master_id = u.id
+     LEFT JOIN regulatory_clauses rc ON sc.clause_id = rc.id
      LEFT JOIN LATERAL (
        SELECT status, risk_level, flowdown_review_completed FROM clause_risk_assessments
        WHERE solicitation_clause_id = sc.id ORDER BY version DESC LIMIT 1
      ) cra ON true
-     WHERE sc.solicitation_id = $1`,
+     WHERE sc.solicitation_id = $1 AND (u.id IS NOT NULL OR rc.id IS NOT NULL)`,
     [solicitationId]
   )).rows as { is_flow_down_required: boolean; clause_number: string; assessment_status: string; risk_level: string; flowdown_review_completed: boolean }[];
 
@@ -137,16 +141,20 @@ export async function generateRiskLogSnapshot(
   if (!sol) throw new Error('Solicitation not found');
 
   const clauses = await query(
-    `SELECT rc.clause_number, rc.title, rc.regulation_type, sc.is_flow_down_required,
-      cra.risk_level, cra.risk_score_percent, cra.risk_category
+    `SELECT COALESCE(u.clause_number, rc.clause_number) AS clause_number,
+       COALESCE(u.title, rc.title) AS title,
+       COALESCE(u.regulation, rc.regulation_type) AS regulation_type,
+       COALESCE(u.is_flow_down, sc.is_flow_down_required) AS is_flow_down_required,
+       cra.risk_level, cra.risk_score_percent, cra.risk_category
      FROM solicitation_clauses sc
-     JOIN regulatory_clauses rc ON sc.clause_id = rc.id
+     LEFT JOIN unified_clause_master u ON sc.unified_clause_master_id = u.id
+     LEFT JOIN regulatory_clauses rc ON sc.clause_id = rc.id
      LEFT JOIN LATERAL (
        SELECT risk_level, risk_score_percent, risk_category FROM clause_risk_assessments
        WHERE solicitation_clause_id = sc.id ORDER BY version DESC LIMIT 1
      ) cra ON true
-     WHERE sc.solicitation_id = $1
-     ORDER BY COALESCE(cra.risk_score_percent, 0) DESC, rc.clause_number`,
+     WHERE sc.solicitation_id = $1 AND (u.id IS NOT NULL OR rc.id IS NOT NULL)
+     ORDER BY COALESCE(cra.risk_score_percent, 0) DESC, COALESCE(u.clause_number, rc.clause_number)`,
     [solicitationId]
   );
 

@@ -13,7 +13,8 @@
     "start": "node dist/scripts/prodBoot.js",
     "start:prod": "node dist/scripts/prodBoot.js","reg:ingest:prod": "node dist/scripts/ingestRegulations.js","seed:engine-demo": "tsx src/scripts/seedGovernanceEngineDemo.ts",
     "seed:overlay-acceptance": "tsx src/scripts/seedClauseOverlayAcceptance.ts",
-    "reg:verify": "tsx src/scripts/regVerify.ts","reg:verify:prod": "node dist/scripts/regVerify.js"
+    "reg:verify": "tsx src/scripts/regVerify.ts","reg:verify:prod": "node dist/scripts/regVerify.js",
+    "migrate:clauses": "tsx src/scripts/migrateClauseData.ts"
   },
   "dependencies": {
     "cheerio": "^1.2.0",
