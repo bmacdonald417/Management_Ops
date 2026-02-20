@@ -35,7 +35,7 @@ export async function getDoctrineSectionSuggestions(context: DoctrineSectionSugg
     ? `\nSuggested QMS/FRM documents that may fulfill this section (mention in suggestions where relevant): ${qmsDocuments.join(', ')}`
     : '';
 
-  const userPrompt = `You are helping write a Governance & Risk Doctrine document aligned with federal contracting and MacTech QMS.
+  const userPrompt = `You are writing assessor-ready, audit-grade policy statements for a Federal Contract Governance & Risk Management Manual. Output must be formal, declarative language suitable for CMMC, DCAA, or contractual compliance review.
 
 Doctrine title: ${context.doctrineTitle}
 Section ${context.sectionNumber || ''}: ${context.sectionTitle}
@@ -43,16 +43,25 @@ ${context.existingContent ? `Existing content for this section:\n${context.exist
 ${doctrineContext}
 ${qmsHint}
 
-Provide 2–3 short, concrete content suggestions for this section. Use Markdown (headings, lists, bold) where appropriate. Suggest which QMS forms (e.g. MAC-FRM-xxx, MAC-SOP-xxx) or appendix documents should be added to fulfill this section. Return a JSON object with:
-- "suggestions": array of strings (each a paragraph or short Markdown block)
-- "qmsDocuments": array of strings (document IDs/titles to add to QMS, e.g. "MAC-FRM-013 Clause Risk Log")
-Include both policy text suggestions and actionable QMS document recommendations. Align with federal governance best practices.`;
+Provide 2–4 ASSESSOR-READY POLICY STATEMENTS. Each statement must be:
+- Written as formal, third-person policy text (e.g., "MacTech shall...", "All contracts must...") — NOT instructions like "include X" or "consider adding Y"
+- Suitable for direct insertion into a controlled document and audit review
+- Specific to federal contracting (FAR/DFARS), risk management, and MacTech governance
+- Concise but complete; avoid filler or generic boilerplate
+
+Then, for each statement, if implementation requires procedures or forms: add IMPLEMENTATION GUIDANCE — e.g., "Implement via MAC-FRM-013 Clause Risk Log" or "Establish written procedure documenting [specific control]."
+
+Return a JSON object with:
+- "suggestions": array of strings — each string is ONE assessor-ready policy statement (optionally followed by implementation guidance in a second paragraph or bullet). Use Markdown (bold for key terms) where helpful.
+- "qmsDocuments": array of strings — QMS/FRM forms or appendix documents required to implement (e.g., "MAC-FRM-013 Clause Risk Log", "MAC-SOP-008 Document Control Procedure")
+
+Do NOT output generic prompts or "what to include" guidance. Output the actual policy text and implementation references.`;
 
   try {
     const completion = await client.chat.completions.create({
       model: getOpenAIModel(),
       messages: [
-        { role: 'system', content: 'You are a governance and risk management policy writer. Output only valid JSON with "suggestions" and "qmsDocuments" arrays. Use Markdown in suggestions where helpful.' },
+        { role: 'system', content: 'You write assessor-ready, audit-grade policy statements — formal declarative language for controlled documents. Never output "include X" or "consider Y" prompts. Output the actual policy text and implementation references. Output only valid JSON with "suggestions" (assessor-ready statements) and "qmsDocuments" arrays.' },
         { role: 'user', content: userPrompt }
       ],
       response_format: { type: 'json_object' },
