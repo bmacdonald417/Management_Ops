@@ -131,3 +131,165 @@ export async function qmsGetFormRecord(id: string): Promise<QmsFormRecord | null
 export function isQmsConfigured(): boolean {
   return !!(QMS_BASE_URL && QMS_INTEGRATION_KEY);
 }
+
+// --- Phase 4: Form templates & completed form repository ---
+
+export interface FormTemplateResult {
+  templateBuffer: Buffer;
+  templateType: 'docx' | 'pdf' | 'json';
+  schema?: unknown;
+}
+
+/**
+ * Fetch a form template from QMS: GET /api/documents/:id/template.
+ * Response: JSON with id, documentId, title, documentType, versionMajor, versionMinor, content, status.
+ * Requires document:view. Returns template as JSON (templateType: 'json', schema from content).
+ */
+export async function qmsGetFormTemplate(qmsDocumentId: string): Promise<FormTemplateResult | null> {
+  if (!QMS_BASE_URL) return null;
+  try {
+    const res = await qmsFetch(`/api/documents/${encodeURIComponent(qmsDocumentId)}/template`);
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      throw new Error(`QMS get template failed: ${res.status}`);
+    }
+    const body = (await res.json()) as {
+      id?: string;
+      documentId?: string;
+      title?: string;
+      documentType?: string;
+      versionMajor?: number;
+      versionMinor?: number;
+      content?: unknown;
+      status?: string;
+    };
+    const schema = body.content ?? body;
+    const templateBuffer = Buffer.from(JSON.stringify(body), 'utf-8');
+    return { templateBuffer, templateType: 'json', schema };
+  } catch (e) {
+    console.error('QMS getFormTemplate error:', e);
+    return null;
+  }
+}
+
+export interface UploadCompletedFormMetadata {
+  originalQMSDocumentId: string;
+  proposalId: string;
+  formName: string;
+  fileName: string;
+  mimeType: string;
+}
+
+export interface UploadCompletedFormResult {
+  qmsDocumentId: string;
+  status: string;
+  downloadUrl: string;
+}
+
+/**
+ * Upload a completed form to QMS (e.g. POST /api/documents/completed-forms).
+ */
+export async function qmsUploadCompletedForm(
+  formBuffer: Buffer,
+  metadata: UploadCompletedFormMetadata
+): Promise<UploadCompletedFormResult | null> {
+  if (!QMS_BASE_URL) return null;
+  try {
+    const formData = new FormData();
+    formData.append('file', new Blob([formBuffer]), metadata.fileName);
+    formData.append('originalQMSDocumentId', metadata.originalQMSDocumentId);
+    formData.append('proposalId', metadata.proposalId);
+    formData.append('formName', metadata.formName);
+
+    const headers: Record<string, string> = { ...getAuthHeader() };
+    delete (headers as Record<string, unknown>)['Content-Type'];
+
+    const res = await fetch(`${QMS_BASE_URL.replace(/\/$/, '')}/api/documents/completed-forms`, {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    if (!res.ok) throw new Error(`QMS upload completed form failed: ${res.status}`);
+    const data = (await res.json()) as UploadCompletedFormResult;
+    return data;
+  } catch (e) {
+    console.error('QMS uploadCompletedForm error:', e);
+    return null;
+  }
+}
+
+/**
+ * Download a document from QMS: GET /api/documents/:id/download.
+ * QMS redirects (302) to GET /api/documents/:id/pdf?mode=download; fetch follows redirect and returns PDF buffer.
+ */
+export async function qmsDownloadDocument(qmsDocumentId: string): Promise<Buffer | null> {
+  if (!QMS_BASE_URL) return null;
+  try {
+    const res = await qmsFetch(`/api/documents/${encodeURIComponent(qmsDocumentId)}/download`, { redirect: 'follow' });
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      throw new Error(`QMS download failed: ${res.status}`);
+    }
+    const ab = await res.arrayBuffer();
+    return Buffer.from(ab);
+  } catch (e) {
+    console.error('QMS downloadDocument error:', e);
+    return null;
+  }
+}
+
+/** List form templates: GET /api/documents?type=form-template (documentType: FORM, status: EFFECTIVE). Response: { documents } ordered by documentId and version. */
+export async function qmsListFormTemplates(): Promise<Array<{ id: string; name: string; templateCode?: string }>> {
+  if (!QMS_BASE_URL) return [];
+  try {
+    const res = await qmsFetch('/api/documents?type=form-template');
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      documents?: Array<{ id?: string; documentId?: string; title?: string; name?: string; templateCode?: string }>;
+    };
+    const list = data.documents ?? [];
+    return list.slice(0, 200).map((doc) => ({
+      id: doc.documentId ?? doc.id ?? '',
+      name: doc.title ?? doc.name ?? doc.documentId ?? doc.id ?? 'Untitled',
+      templateCode: doc.templateCode
+    })).filter((t) => t.id);
+  } catch (e) {
+    console.error('QMS listFormTemplates error:', e);
+    return [];
+  }
+}
+
+/** List completed form records: GET /api/documents/completed-forms. Uses document:view. Query: limit (default 50, max 200), offset (default 0), optional status, templateCode. Response: { records, total }. */
+export interface QmsCompletedFormRecord {
+  id: string;
+  templateDocument?: { documentId?: string; title?: string };
+  createdBy?: unknown;
+  [key: string]: unknown;
+}
+
+export async function qmsListCompletedForms(options: {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  templateCode?: string;
+} = {}): Promise<{ records: QmsCompletedFormRecord[]; total: number }> {
+  if (!QMS_BASE_URL) return { records: [], total: 0 };
+  try {
+    const params = new URLSearchParams();
+    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    params.set('limit', String(limit));
+    params.set('offset', String(options.offset ?? 0));
+    if (options.status) params.set('status', options.status);
+    if (options.templateCode) params.set('templateCode', options.templateCode);
+    const res = await qmsFetch(`/api/documents/completed-forms?${params.toString()}`);
+    if (!res.ok) return { records: [], total: 0 };
+    const data = (await res.json()) as { records?: QmsCompletedFormRecord[]; total?: number };
+    return {
+      records: data.records ?? [],
+      total: data.total ?? (data.records?.length ?? 0)
+    };
+  } catch (e) {
+    console.error('QMS listCompletedForms error:', e);
+    return { records: [], total: 0 };
+  }
+}

@@ -19,6 +19,8 @@ interface ProposalForm {
   form_data: Record<string, unknown>;
   status: string;
   qms_document_id: string;
+  completed_qms_document_id?: string | null;
+  download_url?: string | null;
 }
 
 interface Proposal {
@@ -44,6 +46,11 @@ export default function ProposalDetail() {
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editingSectionContent, setEditingSectionContent] = useState('');
+  const [formTemplates, setFormTemplates] = useState<Array<{ id: string; name: string }>>([]);
+  const [formTemplateSelect, setFormTemplateSelect] = useState('');
+  const [newFormName, setNewFormName] = useState('');
+  const [newFormQmsId, setNewFormQmsId] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const load = () => {
     if (!id) return;
@@ -53,6 +60,12 @@ export default function ProposalDetail() {
   };
 
   useEffect(() => { load(); }, [id]);
+
+  useEffect(() => {
+    client.get('/qms/form-templates')
+      .then((r) => setFormTemplates((r.data?.templates ?? []).map((t: { id: string; name: string }) => ({ id: t.id, name: t.name || t.id }))))
+      .catch(() => setFormTemplates([]));
+  }, []);
 
   const updateProposal = (patch: Partial<Proposal>) => {
     if (!id) return;
@@ -102,13 +115,43 @@ export default function ProposalDetail() {
   };
 
   const addForm = () => {
-    const name = window.prompt('Form name (e.g. MAC-FRM-013):', 'MAC-FRM-013');
-    const qmsId = window.prompt('QMS document/template ID:', '');
-    if (!id || !name || !qmsId) return;
+    const qmsId = formTemplateSelect || newFormQmsId.trim() || (formTemplates.length === 0 ? '' : '');
+    const name = newFormName.trim() || (formTemplates.find((t) => t.id === qmsId)?.name) || qmsId;
+    if (!id) return;
+    if (!qmsId) {
+      const prompted = window.prompt('QMS document/template ID:', '');
+      if (!prompted) return;
+      setSaving(true);
+      client.post(`/proposals/${id}/forms`, { formName: name || prompted, qmsDocumentId: prompted, formData: {} })
+        .then(() => { setShowAddForm(false); setFormTemplateSelect(''); setNewFormName(''); setNewFormQmsId(''); load(); setSaving(false); })
+        .catch(() => setSaving(false));
+      return;
+    }
     setSaving(true);
     client.post(`/proposals/${id}/forms`, { formName: name, qmsDocumentId: qmsId, formData: {} })
-      .then(() => { load(); setSaving(false); })
+      .then(() => { setShowAddForm(false); setFormTemplateSelect(''); setNewFormName(''); setNewFormQmsId(''); load(); setSaving(false); })
       .catch(() => setSaving(false));
+  };
+
+  const downloadCompletedForm = (formId: string) => {
+    client.get(`/proposals/forms/${formId}/download-completed`, { responseType: 'blob' })
+      .then((r) => {
+        const blob = r.data as Blob;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `completed-form-${formId.slice(0, 8)}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((e) => {
+        if (e.response?.status === 302 && e.response?.headers?.location) {
+          window.open(e.response.headers.location, '_blank');
+        } else {
+          console.error(e);
+          alert(e.response?.data?.error || 'Download failed');
+        }
+      });
   };
 
   const updateFormData = (formId: string, formData: Record<string, unknown>) => {
@@ -251,23 +294,65 @@ export default function ProposalDetail() {
       {/* Forms */}
       <section>
         <h2 className="text-lg font-semibold text-gov-navy mb-3">Forms</h2>
-        <button onClick={addForm} disabled={saving} className="mb-3 px-4 py-2 border border-gov-blue text-gov-blue rounded-lg text-sm font-medium hover:bg-gov-blue hover:text-white disabled:opacity-50">
-          Add Form
-        </button>
+        {!showAddForm ? (
+          <button onClick={() => setShowAddForm(true)} disabled={saving} className="mb-3 px-4 py-2 border border-gov-blue text-gov-blue rounded-lg text-sm font-medium hover:bg-gov-blue hover:text-white disabled:opacity-50">
+            Add Form
+          </button>
+        ) : (
+          <div className="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-lg inline-block">
+            <label className="block text-sm font-medium text-slate-700 mb-1">QMS form template</label>
+            {formTemplates.length > 0 ? (
+              <select
+                value={formTemplateSelect}
+                onChange={(e) => setFormTemplateSelect(e.target.value)}
+                className="border border-slate-300 rounded-lg px-3 py-2 text-sm mr-2"
+              >
+                <option value="">— Select or enter ID below —</option>
+                {formTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name || t.id}</option>
+                ))}
+              </select>
+            ) : null}
+            {formTemplates.length === 0 && <span className="text-xs text-slate-500 mr-2">(No templates from QMS; enter ID below)</span>}
+            <input
+              type="text"
+              placeholder="QMS template ID (if not in list)"
+              value={newFormQmsId}
+              onChange={(e) => setNewFormQmsId(e.target.value)}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm mr-2 mt-1"
+            />
+            <input
+              type="text"
+              placeholder="Form name (e.g. MAC-FRM-013)"
+              value={newFormName}
+              onChange={(e) => setNewFormName(e.target.value)}
+              className="border border-slate-300 rounded-lg px-3 py-2 text-sm mr-2 mt-1"
+            />
+            <button onClick={addForm} disabled={saving} className="px-3 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium disabled:opacity-50">Add</button>
+            <button type="button" onClick={() => { setShowAddForm(false); setFormTemplateSelect(''); setNewFormName(''); setNewFormQmsId(''); }} className="ml-2 text-sm text-slate-600 hover:underline">Cancel</button>
+          </div>
+        )}
         <div className="space-y-3">
           {proposal.forms.map((f) => (
             <div key={f.id} className="bg-white border border-slate-200 rounded-lg p-4">
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-center flex-wrap gap-2">
                 <span className="font-medium">{f.form_name}</span>
                 <span className="text-xs px-2 py-1 rounded bg-slate-100">{f.status}</span>
               </div>
-              <p className="text-xs text-slate-500 mt-1">QMS: {f.qms_document_id}</p>
+              <p className="text-xs text-slate-500 mt-1">QMS template: {f.qms_document_id}</p>
               <div className="mt-2 text-sm text-slate-600">
                 {Object.keys(f.form_data || {}).length === 0 ? 'No data yet' : JSON.stringify(f.form_data)}
               </div>
-              <button onClick={() => updateFormData(f.id, { ...(f.form_data || {}), lastEdited: new Date().toISOString() })} className="mt-2 text-sm text-gov-blue hover:underline">
-                Edit form data (placeholder)
-              </button>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button onClick={() => updateFormData(f.id, { ...(f.form_data || {}), lastEdited: new Date().toISOString() })} className="text-sm text-gov-blue hover:underline">
+                  Edit form data
+                </button>
+                {(f.completed_qms_document_id || f.download_url) && (
+                  <button onClick={() => downloadCompletedForm(f.id)} className="text-sm text-gov-blue hover:underline font-medium">
+                    Download completed form
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

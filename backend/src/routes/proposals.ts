@@ -7,6 +7,13 @@ import { query } from '../db/connection.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { generateProposalDocument } from '../services/proposalGeneratorService.js';
 import { getProposalSectionSuggestions, getSolicitationDetailsForProposal } from '../services/proposalSectionSuggestions.js';
+import { fillForm } from '../services/formFillingService.js';
+import {
+  isQmsConfigured,
+  qmsGetFormTemplate,
+  qmsUploadCompletedForm,
+  qmsDownloadDocument
+} from '../services/qmsClient.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -239,6 +246,24 @@ router.delete(
   }
 );
 
+// Helper: fill template and upload to QMS; returns { completedQmsDocumentId, downloadUrl } or null
+async function fillAndUploadForm(proposalId: string, qmsDocumentId: string, formName: string, formData: Record<string, unknown>) {
+  if (!isQmsConfigured()) return null;
+  const template = await qmsGetFormTemplate(qmsDocumentId);
+  if (!template) return null;
+  const filledBuffer = await fillForm(template.templateBuffer, template.templateType, formData);
+  const ext = template.templateType === 'pdf' ? 'pdf' : template.templateType === 'docx' ? 'docx' : 'html';
+  const mime = template.templateType === 'pdf' ? 'application/pdf' : template.templateType === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : 'text/html';
+  const result = await qmsUploadCompletedForm(filledBuffer, {
+    originalQMSDocumentId: qmsDocumentId,
+    proposalId,
+    formName,
+    fileName: `${formName.replace(/[^a-zA-Z0-9_-]/g, '_')}.${ext}`,
+    mimeType: mime
+  });
+  return result;
+}
+
 // POST /api/proposals/:id/forms
 router.post(
   '/:id/forms',
@@ -259,7 +284,25 @@ router.post(
        VALUES ($1, $2, $3, $4::jsonb, 'PENDING') RETURNING *`,
       [id, body.qmsDocumentId, body.formName, JSON.stringify(body.formData ?? {})]
     );
-    res.status(201).json(r.rows[0]);
+    const row = r.rows[0] as { id: string };
+
+    if (Object.keys(body.formData ?? {}).length > 0 && isQmsConfigured()) {
+      try {
+        const result = await fillAndUploadForm(id, body.qmsDocumentId, body.formName, body.formData as Record<string, unknown>);
+        if (result) {
+          await query(
+            `UPDATE proposal_forms SET completed_qms_document_id = $2, download_url = $3, status = 'COMPLETED', updated_at = NOW() WHERE id = $1`,
+            [row.id, result.qmsDocumentId, result.downloadUrl || null]
+          );
+          const updated = (await query(`SELECT * FROM proposal_forms WHERE id = $1`, [row.id])).rows[0];
+          return res.status(201).json(updated);
+        }
+      } catch (e) {
+        console.error('Form fill/upload failed:', e);
+      }
+    }
+
+    res.status(201).json(row);
   }
 );
 
@@ -270,12 +313,37 @@ router.put(
   async (req, res) => {
     const { formId } = req.params;
     const body = req.body as Record<string, unknown>;
+    const formRow = (await query(
+      `SELECT id, proposal_id, qms_document_id, form_name FROM proposal_forms WHERE id = $1`,
+      [formId]
+    )).rows[0] as { id: string; proposal_id: string; qms_document_id: string; form_name: string } | undefined;
+    if (!formRow) return res.status(404).json({ error: 'Not found' });
+
+    if (body.formData !== undefined && Object.keys(body.formData as Record<string, unknown>).length > 0 && isQmsConfigured()) {
+      try {
+        const result = await fillAndUploadForm(
+          formRow.proposal_id,
+          formRow.qms_document_id,
+          formRow.form_name,
+          body.formData as Record<string, unknown>
+        );
+        if (result) {
+          body.completedQmsDocumentId = result.qmsDocumentId;
+          body.downloadUrl = result.downloadUrl ?? null;
+          body.status = 'COMPLETED';
+        }
+      } catch (e) {
+        console.error('Form fill/upload failed:', e);
+      }
+    }
+
     const updates: string[] = [];
     const values: unknown[] = [];
     let i = 1;
     if (body.formData !== undefined) { updates.push(`form_data = $${i++}::jsonb`); values.push(JSON.stringify(body.formData)); }
     if (body.status !== undefined && FORM_STATUSES.includes(body.status as (typeof FORM_STATUSES)[number])) { updates.push(`status = $${i++}`); values.push(body.status); }
     if (body.completedQmsDocumentId !== undefined) { updates.push(`completed_qms_document_id = $${i++}`); values.push(body.completedQmsDocumentId); }
+    if (body.downloadUrl !== undefined) { updates.push(`download_url = $${i++}`); values.push(body.downloadUrl); }
     if (updates.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
     updates.push(`updated_at = NOW()`);
     values.push(formId);
@@ -286,6 +354,33 @@ router.put(
     );
     if (!r.rows[0]) return res.status(404).json({ error: 'Not found' });
     res.json(r.rows[0]);
+  }
+);
+
+// GET /api/proposals/forms/:formId/download-completed
+router.get(
+  '/forms/:formId/download-completed',
+  authorize(['Level 1', 'Level 2', 'Level 3', 'Level 4']),
+  async (req, res) => {
+    const { formId } = req.params;
+    const form = (await query(
+      `SELECT pf.id, pf.form_name, pf.completed_qms_document_id, pf.download_url, pf.proposal_id
+       FROM proposal_forms pf WHERE pf.id = $1`,
+      [formId]
+    )).rows[0] as { id: string; form_name: string; completed_qms_document_id: string | null; download_url: string | null; proposal_id: string } | undefined;
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+    if (!form.completed_qms_document_id && !form.download_url) {
+      return res.status(400).json({ error: 'No completed form document available' });
+    }
+    if (form.download_url) {
+      return res.redirect(form.download_url);
+    }
+    const buffer = await qmsDownloadDocument(form.completed_qms_document_id!);
+    if (!buffer) return res.status(502).json({ error: 'Could not download document from QMS' });
+    const filename = `${(form.form_name || 'form').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
   }
 );
 

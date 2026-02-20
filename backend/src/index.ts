@@ -24,6 +24,7 @@ import copilotRouter from './routes/copilot.js';
 import signaturesRouter from './routes/signatures.js';
 import proposalsRouter from './routes/proposals.js';
 import governanceDoctrineRouter from './routes/governanceDoctrine.js';
+import qmsRouter from './routes/qms.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -50,6 +51,7 @@ app.use('/api/copilot', copilotRouter);
 app.use('/api/signatures', signaturesRouter);
 app.use('/api/proposals', proposalsRouter);
 app.use('/api/governance-doctrine', governanceDoctrineRouter);
+app.use('/api/qms', qmsRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'MacTech Governance Platform' });
