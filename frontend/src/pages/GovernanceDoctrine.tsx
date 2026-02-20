@@ -166,6 +166,15 @@ export default function GovernanceDoctrine() {
     sectionRefs.current[sectionId]?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const completenessFiltered = useMemo(() => {
+    if (!completeness) return null;
+    if (!showIncompleteOnly) return completeness;
+    return {
+      ...completeness,
+      sections: completeness.sections.filter((s) => !s.isComplete)
+    };
+  }, [completeness, showIncompleteOnly]);
+
   if (loading && list.length > 0 && !doctrine) {
     return <div className="text-slate-500">Loading doctrine...</div>;
   }
@@ -207,15 +216,6 @@ export default function GovernanceDoctrine() {
       </div>
     );
   }
-
-  const completenessFiltered = useMemo(() => {
-    if (!completeness) return null;
-    if (!showIncompleteOnly) return completeness;
-    return {
-      ...completeness,
-      sections: completeness.sections.filter((s) => !s.isComplete)
-    };
-  }, [completeness, showIncompleteOnly]);
 
   if (!doctrine) return null;
 
