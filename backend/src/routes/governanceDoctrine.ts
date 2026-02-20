@@ -5,12 +5,14 @@
 import { Router } from 'express';
 import { query } from '../db/connection.js';
 import { CONTRACT_LIFECYCLE_PHASES, getPhaseForSectionNumber } from '../services/contractLifecyclePhases.js';
+import { DOCTRINE_TEMPLATE_SECTIONS, getTemplateSection } from '../services/doctrineTemplate.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import {
   createDoctrine,
   getDoctrine,
   updateDoctrine,
   createSection,
+  createSectionsFromTemplate,
   updateSection,
   deleteSection,
   markSectionComplete,
@@ -43,6 +45,37 @@ router.get('/lifecycle-phases/:sectionNumber', (req, res) => {
   res.json(phase);
 });
 
+// GET /api/governance-doctrine/template (Governance Philosophy & Enterprise Risk Doctrine sections)
+router.get('/template', (_req, res) => {
+  res.json({ sections: DOCTRINE_TEMPLATE_SECTIONS });
+});
+
+// GET /api/governance-doctrine/template/:sectionNumber (Requirement + QMS refs for Assistance Panel)
+router.get('/template/:sectionNumber', (req, res) => {
+  const t = getTemplateSection(decodeURIComponent(req.params.sectionNumber));
+  if (!t) return res.status(404).json({ error: 'No template section found' });
+  res.json(t);
+});
+
+// POST /api/governance-doctrine/:id/initialize-from-template
+router.post(
+  '/:id/initialize-from-template',
+  authorize(['Level 1', 'Level 2', 'Level 3', 'Level 4']),
+  async (req, res) => {
+    const doctrine = await getDoctrine(req.params.id);
+    if (!doctrine) return res.status(404).json({ error: 'Doctrine not found' });
+    const template = DOCTRINE_TEMPLATE_SECTIONS.map((s) => ({
+      sectionNumber: s.sectionNumber,
+      title: s.title,
+      order: s.order
+    }));
+    const count = await createSectionsFromTemplate(req.params.id, template);
+    await logAudit('GovernanceDoctrine', req.params.id, 'initialized_from_template', req.user?.id, { sectionsAdded: count });
+    const updated = await getDoctrine(req.params.id);
+    res.json(updated);
+  }
+);
+
 // POST /api/governance-doctrine
 router.post(
   '/',
@@ -51,11 +84,17 @@ router.post(
     const body = z.object({
       title: z.string().min(1),
       version: z.string().optional(),
-      purpose: z.string().optional()
+      purpose: z.string().optional(),
+      initializeFromTemplate: z.boolean().optional()
     }).parse(req.body);
     const doc = await createDoctrine(body.title, body.version ?? '1.0', body.purpose);
     await logAudit('GovernanceDoctrine', doc.id, 'created', req.user?.id);
-    res.status(201).json(doc);
+    if (body.initializeFromTemplate) {
+      const template = DOCTRINE_TEMPLATE_SECTIONS.map((s) => ({ sectionNumber: s.sectionNumber, title: s.title, order: s.order }));
+      await createSectionsFromTemplate(doc.id, template);
+    }
+    const created = await getDoctrine(doc.id);
+    res.status(201).json(created);
   }
 );
 
@@ -137,23 +176,26 @@ router.post(
       `SELECT ds.*, gd.title AS doctrine_title FROM doctrine_sections ds
        JOIN governance_doctrine gd ON ds.governance_doctrine_id = gd.id WHERE ds.id = $1`,
       [sectionId]
-    )).rows[0] as { doctrine_title: string; title: string; content: string | null; governance_doctrine_id: string } | undefined;
+    )).rows[0] as { doctrine_title: string; title: string; section_number: string; content: string | null; governance_doctrine_id: string } | undefined;
     if (!section) return res.status(404).json({ error: 'Section not found' });
 
+    const templateSection = getTemplateSection(section.section_number);
     const fullDoctrineContext = await getDoctrineContextForSuggestions(section.governance_doctrine_id);
-    const suggestions = await getDoctrineSectionSuggestions({
+    const result = await getDoctrineSectionSuggestions({
       doctrineTitle: section.doctrine_title,
       sectionTitle: section.title,
+      sectionNumber: section.section_number,
       existingContent: section.content ?? undefined,
-      fullDoctrineContext: fullDoctrineContext || undefined
+      fullDoctrineContext: fullDoctrineContext || undefined,
+      qmsReferences: templateSection?.qmsReferences
     });
 
     const saveToSection = (req.query.save as string) === 'true';
-    if (saveToSection && suggestions.length > 0) {
-      await updateSection(sectionId, { copilotSuggestions: suggestions });
+    if (saveToSection && (result.suggestions.length > 0 || result.qmsDocuments.length > 0)) {
+      await updateSection(sectionId, { copilotSuggestions: { suggestions: result.suggestions, qmsDocuments: result.qmsDocuments } });
     }
 
-    res.json({ suggestions });
+    res.json({ suggestions: result.suggestions, qmsDocuments: result.qmsDocuments });
   }
 );
 

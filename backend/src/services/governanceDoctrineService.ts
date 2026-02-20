@@ -95,6 +95,24 @@ export async function updateDoctrine(
   return (r.rows[0] as GovernanceDoctrineRow) ?? null;
 }
 
+export async function createSectionsFromTemplate(doctrineId: string, template: Array<{ sectionNumber: string; title: string; order: number }>): Promise<number> {
+  let count = 0;
+  for (const s of template) {
+    try {
+      await query(
+        `INSERT INTO doctrine_sections (governance_doctrine_id, section_number, title, content, "order", required)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [doctrineId, s.sectionNumber, s.title, '', s.order, true]
+      );
+      count++;
+    } catch (e: unknown) {
+      const err = e as { code?: string };
+      if (err.code !== '23505') throw e;
+    }
+  }
+  return count;
+}
+
 export async function createSection(
   doctrineId: string,
   sectionNumber: string,

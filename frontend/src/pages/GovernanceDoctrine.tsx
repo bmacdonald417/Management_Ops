@@ -1,7 +1,8 @@
 /**
  * Phase 2: Governance Builder — split-pane side-by-side assistance tool.
- * Left: Working Document (Markdown editor). Right: Doctrine Requirements + Suggested Text.
- * Maps 11 Contract Lifecycle phases; version control per Section 1.6.
+ * Left: Working Document (sections pre-populated from template, content blank).
+ * Right: Doctrine Requirements + QMS refs + Suggested Text from Copilot.
+ * Template from Governance Philosophy & Enterprise Risk Doctrine.
  */
 import { useEffect, useState, useRef, useCallback } from 'react';
 import client from '../api/client';
@@ -15,15 +16,16 @@ interface DoctrineSection {
   content: string | null;
   order: number;
   required: boolean;
-  copilot_suggestions: string[] | null;
+  copilot_suggestions: string[] | { suggestions: string[]; qmsDocuments: string[] } | null;
   is_complete?: boolean;
   completed_at?: string | null;
 }
 
-interface LifecyclePhase {
+interface TemplateSection {
   sectionNumber: string;
   title: string;
   requirement: string;
+  qmsReferences: string[];
   order: number;
 }
 
@@ -44,10 +46,24 @@ interface CompletenessIndex {
   sections: Array<{ id: string; sectionNumber: string; title: string; isComplete: boolean; required: boolean }>;
 }
 
+function getSuggestionsFromSection(sec: DoctrineSection): string[] {
+  const v = sec.copilot_suggestions;
+  if (!v) return [];
+  if (Array.isArray(v)) return v;
+  return v.suggestions ?? [];
+}
+
+function getQmsFromSection(sec: DoctrineSection): string[] {
+  const v = sec.copilot_suggestions;
+  if (!v || Array.isArray(v)) return [];
+  return v.qmsDocuments ?? [];
+}
+
 export default function GovernanceDoctrine() {
   const [list, setList] = useState<GovernanceDoctrineDoc[]>([]);
   const [doctrine, setDoctrine] = useState<GovernanceDoctrineDoc | null>(null);
   const [completeness, setCompleteness] = useState<CompletenessIndex | null>(null);
+  const [template, setTemplate] = useState<TemplateSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState<string | null>(null);
@@ -55,12 +71,12 @@ export default function GovernanceDoctrine() {
   const [newTitle, setNewTitle] = useState('');
   const [newVersion, setNewVersion] = useState('1.0');
   const [newPurpose, setNewPurpose] = useState('');
+  const [initializeFromTemplate, setInitializeFromTemplate] = useState(true);
   const [newSectionNumber, setNewSectionNumber] = useState('');
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
-  const [phases, setPhases] = useState<LifecyclePhase[]>([]);
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
   const [showCopilotPanel, setShowCopilotPanel] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -76,12 +92,12 @@ export default function GovernanceDoctrine() {
     Promise.all([
       client.get(`/governance-doctrine/${id}`),
       client.get(`/governance-doctrine/${id}/completeness`),
-      client.get('/governance-doctrine/lifecycle-phases')
+      client.get('/governance-doctrine/template')
     ])
-      .then(([docRes, compRes, phasesRes]) => {
+      .then(([docRes, compRes, tplRes]) => {
         setDoctrine(docRes.data as GovernanceDoctrineDoc);
         setCompleteness(compRes.data as CompletenessIndex);
-        setPhases((phasesRes.data?.phases ?? []) as LifecyclePhase[]);
+        setTemplate((tplRes.data?.sections ?? []) as TemplateSection[]);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -96,20 +112,36 @@ export default function GovernanceDoctrine() {
     else if (list.length === 0) setLoading(false);
   }, [list, doctrine, loadDoctrine]);
 
+  const initializeFromTemplateAction = () => {
+    if (!doctrine) return;
+    setSaving(true);
+    client.post(`/governance-doctrine/${doctrine.id}/initialize-from-template`)
+      .then((r) => {
+        setDoctrine(r.data as GovernanceDoctrineDoc);
+        loadDoctrine(doctrine.id);
+        setSaving(false);
+      })
+      .catch(() => setSaving(false));
+  };
+
   const createDoctrine = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
     setSaving(true);
-    client.post('/governance-doctrine', { title: newTitle.trim(), version: newVersion.trim() || '1.0', purpose: newPurpose.trim() || undefined })
+    client.post('/governance-doctrine', {
+      title: newTitle.trim(),
+      version: newVersion.trim() || '1.0',
+      purpose: newPurpose.trim() || undefined,
+      initializeFromTemplate: initializeFromTemplate
+    })
       .then((r) => {
         const created = r.data as GovernanceDoctrineDoc;
         setList((prev) => [created, ...prev]);
-        setDoctrine(created);
-        setCompleteness({ totalSections: 0, completedSections: 0, completenessPercentage: 0, sections: [] });
         setCreateMode(false);
         setNewTitle('');
         setNewPurpose('');
         setSaving(false);
+        loadDoctrine(created.id);
       })
       .catch(() => setSaving(false));
   };
@@ -156,12 +188,13 @@ export default function GovernanceDoctrine() {
     client.post(`/governance-doctrine/sections/${sectionId}/suggestions${save ? '?save=true' : ''}`)
       .then((r) => {
         const suggestions = (r.data?.suggestions ?? []) as string[];
+        const qmsDocuments = (r.data?.qmsDocuments ?? []) as string[];
         setDoctrine((d) => {
           if (!d) return d;
           return {
             ...d,
             sections: d.sections.map((s) =>
-              s.id === sectionId ? { ...s, copilot_suggestions: suggestions } : s
+              s.id === sectionId ? { ...s, copilot_suggestions: { suggestions, qmsDocuments } } : s
             )
           };
         });
@@ -190,12 +223,12 @@ export default function GovernanceDoctrine() {
     sectionRefs.current[sectionId]?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const getPhaseForSection = (sectionNumber: string): LifecyclePhase | undefined =>
-    phases.find((p) => p.sectionNumber === sectionNumber) ||
-    phases.find((p) => sectionNumber.startsWith(p.sectionNumber + '.'));
+  const getTemplateForSection = (sectionNumber: string): TemplateSection | undefined =>
+    template.find((t) => t.sectionNumber === sectionNumber) ||
+    template.find((t) => sectionNumber.startsWith(t.sectionNumber + '.'));
 
   const activeSection = doctrine?.sections.find((s) => s.id === activeSectionId);
-  const activePhase = activeSection ? getPhaseForSection(activeSection.section_number) : null;
+  const activeTemplate = activeSection ? getTemplateForSection(activeSection.section_number) : null;
 
   const completenessFiltered = completeness
     ? showIncompleteOnly
@@ -228,7 +261,7 @@ export default function GovernanceDoctrine() {
     return (
       <div>
         <h1 className="font-display font-bold text-2xl text-gov-navy mb-4">Governance Builder</h1>
-        <p className="text-slate-600 mb-4">Create a controlled governance document aligned with the Contract Lifecycle Governance Framework.</p>
+        <p className="text-slate-600 mb-4">Create a controlled governance document aligned with the Governance Philosophy & Enterprise Risk Doctrine.</p>
         <button onClick={() => setCreateMode(true)} className="px-4 py-2 bg-gov-blue text-white rounded-lg font-medium hover:opacity-90">
           Create doctrine
         </button>
@@ -253,6 +286,10 @@ export default function GovernanceDoctrine() {
             <label className="block text-sm font-medium text-slate-700 mb-1">Purpose (optional)</label>
             <textarea value={newPurpose} onChange={(e) => setNewPurpose(e.target.value)} rows={2} className="w-full border border-slate-300 rounded-lg px-3 py-2" />
           </div>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={initializeFromTemplate} onChange={(e) => setInitializeFromTemplate(e.target.checked)} />
+            <span className="text-sm text-slate-700">Initialize with all sections from Governance Philosophy & Enterprise Risk Doctrine (content left blank)</span>
+          </label>
           <div className="flex gap-2">
             <button type="submit" disabled={saving} className="px-4 py-2 bg-gov-blue text-white rounded-lg font-medium disabled:opacity-50">Create</button>
             <button type="button" onClick={() => setCreateMode(false)} className="px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>
@@ -263,6 +300,8 @@ export default function GovernanceDoctrine() {
   }
 
   if (!doctrine) return null;
+
+  const hasNoSections = doctrine.sections.length === 0;
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
@@ -291,17 +330,28 @@ export default function GovernanceDoctrine() {
         </button>
       </div>
 
+      {hasNoSections && (
+        <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-amber-800 text-sm mb-2">This doctrine has no sections. Initialize from the Governance Philosophy & Enterprise Risk Doctrine template to pre-populate all sections (titles only; content left blank for you to add).</p>
+          <button onClick={initializeFromTemplateAction} disabled={saving} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50">
+            Initialize from template
+          </button>
+        </div>
+      )}
+
       {/* Split-pane layout */}
       <div className="flex flex-1 min-h-0 gap-4">
         {/* Left: Working Document */}
         <div className="flex-1 flex flex-col min-w-0 border border-slate-200 rounded-lg bg-white overflow-hidden">
           <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 font-medium text-gov-navy">Working Document</div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div className="flex gap-2 items-center flex-wrap mb-4">
-              <input type="text" placeholder="Section (e.g. 2.2)" value={newSectionNumber} onChange={(e) => setNewSectionNumber(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 w-24 text-sm" />
-              <input type="text" placeholder="Title" value={newSectionTitle} onChange={(e) => setNewSectionTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addSection()} className="border border-slate-300 rounded-lg px-3 py-2 flex-1 min-w-[160px] text-sm" />
-              <button onClick={addSection} disabled={saving} className="px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">Add section</button>
-            </div>
+            {!hasNoSections && (
+              <div className="flex gap-2 items-center flex-wrap mb-4">
+                <input type="text" placeholder="Section (e.g. 2.2)" value={newSectionNumber} onChange={(e) => setNewSectionNumber(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 w-24 text-sm" />
+                <input type="text" placeholder="Title" value={newSectionTitle} onChange={(e) => setNewSectionTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addSection()} className="border border-slate-300 rounded-lg px-3 py-2 flex-1 min-w-[160px] text-sm" />
+                <button onClick={addSection} disabled={saving} className="px-4 py-2 bg-slate-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">Add section</button>
+              </div>
+            )}
             {doctrine.sections
               .sort((a, b) => a.order - b.order)
               .map((sec) => (
@@ -336,7 +386,7 @@ export default function GovernanceDoctrine() {
                       onChange={(e) => setEditingContent(e.target.value)}
                       rows={6}
                       className="w-full border border-slate-300 rounded-lg p-3 text-sm font-mono"
-                      placeholder="Markdown supported..."
+                      placeholder="Add content for this section. Use Markdown for formatting."
                     />
                   ) : (
                     <div className="text-sm text-slate-700 whitespace-pre-wrap font-mono">{sec.content || '—'}</div>
@@ -350,7 +400,7 @@ export default function GovernanceDoctrine() {
         <div className="w-96 flex-shrink-0 flex flex-col border border-slate-200 rounded-lg bg-white overflow-hidden">
           <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 font-medium text-gov-navy">Assistance Panel</div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {completenessFiltered && (
+            {completenessFiltered && completenessFiltered.sections.length > 0 && (
               <div>
                 <label className="flex items-center gap-2 mb-2 text-sm text-slate-600">
                   <input type="checkbox" checked={showIncompleteOnly} onChange={(e) => setShowIncompleteOnly(e.target.checked)} />
@@ -364,30 +414,49 @@ export default function GovernanceDoctrine() {
                 <div>
                   <h4 className="text-sm font-semibold text-slate-700 mb-2">Doctrine Requirement</h4>
                   <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded border border-slate-200">
-                    {activePhase ? activePhase.requirement : `Section ${activeSection.section_number} — No mapped requirement. Add a matching lifecycle phase (e.g. 2.2, 2.3) for contextual guidance.`}
+                    {activeTemplate ? activeTemplate.requirement : `Section ${activeSection.section_number} — Select a section to see requirements from the Governance Philosophy & Enterprise Risk Doctrine.`}
                   </p>
-                  {activePhase && <p className="text-xs text-slate-500 mt-1">Phase {activePhase.sectionNumber}: {activePhase.title}</p>}
                 </div>
+                {(activeTemplate?.qmsReferences?.length ?? 0) > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700 mb-2">QMS Documents to Fulfill</h4>
+                    <ul className="text-sm text-slate-600 space-y-1">
+                      {activeTemplate!.qmsReferences.map((ref, i) => (
+                        <li key={i} className="bg-slate-50 px-2 py-1 rounded border border-slate-100">{ref}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Suggested Text</h4>
-                  {Array.isArray(activeSection.copilot_suggestions) && activeSection.copilot_suggestions.length > 0 ? (
+                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Suggested Text (Copilot)</h4>
+                  {getSuggestionsFromSection(activeSection).length > 0 ? (
                     <ul className="space-y-2">
-                      {(activeSection.copilot_suggestions as string[]).map((s, i) => (
+                      {getSuggestionsFromSection(activeSection).map((s, i) => (
                         <li key={i} className="text-sm text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">{s.slice(0, 200)}{s.length > 200 ? '…' : ''}</li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-slate-500">Click &quot;Get suggestions&quot; to generate AI-assisted content for this section.</p>
+                    <p className="text-sm text-slate-500">Click &quot;Get suggestions&quot; for AI-assisted content and additional QMS document recommendations for this section.</p>
                   )}
                 </div>
-                <div className="flex gap-2">
+                {getQmsFromSection(activeSection).length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-slate-700 mb-2">Copilot-Recommended QMS Documents</h4>
+                    <ul className="text-sm text-slate-600 space-y-1">
+                      {getQmsFromSection(activeSection).map((doc, i) => (
+                        <li key={i} className="bg-blue-50 px-2 py-1 rounded border border-blue-100">{doc}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="flex gap-2 flex-wrap">
                   <button type="button" onClick={() => getSuggestions(activeSection.id, false)} disabled={!!suggestionsLoading} className="text-sm text-gov-blue hover:underline disabled:opacity-50">
                     Get suggestions
                   </button>
                   <button type="button" onClick={() => getSuggestions(activeSection.id, true)} disabled={!!suggestionsLoading} className="text-sm text-slate-600 hover:underline disabled:opacity-50">
                     Get & save
                   </button>
-                  {Array.isArray(activeSection.copilot_suggestions) && (activeSection.copilot_suggestions as string[]).length > 0 && (
+                  {getSuggestionsFromSection(activeSection).length > 0 && (
                     <button type="button" onClick={() => setShowCopilotPanel(true)} className="text-sm text-gov-blue hover:underline">
                       Open apply panel
                     </button>
@@ -396,10 +465,10 @@ export default function GovernanceDoctrine() {
               </>
             )}
             {!activeSection && doctrine.sections.length > 0 && (
-              <p className="text-sm text-slate-500">Select a section to see doctrine requirements and suggested text.</p>
+              <p className="text-sm text-slate-500">Select a section to see doctrine requirements, QMS references, and suggested text.</p>
             )}
             {doctrine.sections.length === 0 && (
-              <p className="text-sm text-slate-500">Add sections to build your doctrine. Use section numbers from the Contract Lifecycle Framework (1.1, 2.2, 2.3, etc.).</p>
+              <p className="text-sm text-slate-500">Click &quot;Initialize from template&quot; above to pre-populate all sections from the Governance Philosophy & Enterprise Risk Doctrine.</p>
             )}
           </div>
         </div>
@@ -408,7 +477,7 @@ export default function GovernanceDoctrine() {
       {/* Copilot apply panel (overlay when suggestions exist) */}
       {showCopilotPanel && activeSectionId && doctrine && (() => {
         const sec = doctrine.sections.find((s) => s.id === activeSectionId);
-        const suggestions = (sec?.copilot_suggestions ?? []) as string[];
+        const suggestions = sec ? getSuggestionsFromSection(sec) : [];
         if (suggestions.length === 0) return null;
         return (
           <div className="fixed right-4 top-24 bottom-24 w-96 max-w-[calc(100vw-2rem)] z-20 border border-slate-200 rounded-lg shadow-xl bg-white">
