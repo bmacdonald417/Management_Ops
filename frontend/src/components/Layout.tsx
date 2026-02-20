@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { governanceSidebarNav } from '../config/sidebarConfig';
 
 const navItems = [
   { path: '/', label: 'Dashboard' },
@@ -12,19 +13,6 @@ const navItems = [
   { path: '/admin/compliance-registry', label: 'Compliance Registry', roles: ['Level 1', 'Level 3'] },
   { path: '/admin/regulatory-library', label: 'Regulatory Library', roles: ['Level 1', 'Level 3'] },
   { path: '/admin/ai-settings', label: 'AI Settings', roles: ['Level 1', 'Level 3'] }
-];
-
-const governanceSubNav = [
-  { path: '/governance-engine', label: 'Pre-Bid Dashboard' },
-  { path: '/governance-engine/solicitations', label: 'Solicitations' },
-  { path: '/governance-engine/clause-library', label: 'Clause Library' },
-  { path: '/governance-engine/auto-builder', label: 'Auto-Builder' },
-  { path: '/governance-engine/copilot', label: 'Copilot' },
-  { path: '/governance-engine/maturity', label: 'Maturity' },
-  { path: '/governance-engine/reports', label: 'Reports' },
-  { path: '/governance-engine/signature-requests', label: 'Signature Requests' },
-  { path: '/governance-engine/proposals', label: 'Proposals' },
-  { path: '/governance-engine/doctrine', label: 'Doctrine Builder' }
 ];
 
 export default function Layout() {
@@ -73,17 +61,30 @@ export default function Layout() {
       {location.pathname.startsWith('/governance-engine') && (
         <div className="bg-slate-100 border-b print:hidden">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <nav className="flex gap-1 py-2">
-              {governanceSubNav.map(({ path, label }) => {
-                const isActive = path === '/governance-engine' ? location.pathname === '/governance-engine' : location.pathname.startsWith(path);
+            <nav className="flex flex-wrap gap-1 py-2 items-center">
+              {governanceSidebarNav.map((item) => {
+                const isParentActive = item.path === '/governance-engine' ? location.pathname === '/governance-engine' : location.pathname.startsWith(item.path);
                 return (
-                  <Link
-                    key={path}
-                    to={path}
-                    className={`px-3 py-1.5 rounded text-sm font-medium ${isActive ? 'bg-white text-gov-navy shadow' : 'text-slate-600 hover:text-gov-navy'}`}
-                  >
-                    {label}
-                  </Link>
+                  <div key={item.path} className="flex flex-wrap items-center gap-1">
+                    <Link
+                      to={item.path}
+                      className={`px-3 py-1.5 rounded text-sm font-medium ${isParentActive ? 'bg-white text-gov-navy shadow' : 'text-slate-600 hover:text-gov-navy'}`}
+                    >
+                      {item.label}
+                    </Link>
+                    {item.children && isParentActive && item.children.map((child) => {
+                      const isChildActive = location.pathname === child.path || (child.path.includes('#') && location.pathname === item.path);
+                      return (
+                        <Link
+                          key={child.path}
+                          to={child.path}
+                          className={`px-2 py-1 rounded text-xs font-medium ${isChildActive ? 'bg-gov-blue/10 text-gov-navy' : 'text-slate-500 hover:text-gov-navy'}`}
+                        >
+                          {child.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 );
               })}
             </nav>

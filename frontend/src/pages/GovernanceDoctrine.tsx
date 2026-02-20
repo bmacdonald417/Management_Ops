@@ -1,10 +1,10 @@
 /**
- * Phase 3: Governance Doctrine Builder & Completeness Index.
- * Single doctrine view: completeness widget, sections with edit / Copilot / Mark complete.
+ * Phase 3 + 5: Governance Doctrine — Completeness Index (sticky, filter), Copilot panel, responsive.
  */
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import client from '../api/client';
 import CompletenessIndexWidget from '../components/governance/CompletenessIndexWidget';
+import CopilotSuggestionsPanel from '../components/copilot/CopilotSuggestionsPanel';
 
 interface DoctrineSection {
   id: string;
@@ -48,6 +48,8 @@ export default function GovernanceDoctrine() {
   const [newSectionTitle, setNewSectionTitle] = useState('');
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState('');
+  const [showIncompleteOnly, setShowIncompleteOnly] = useState(false);
+  const [copilotPanelSectionId, setCopilotPanelSectionId] = useState<string | null>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const loadList = () => {
@@ -140,9 +142,19 @@ export default function GovernanceDoctrine() {
             )
           };
         });
+        setCopilotPanelSectionId(sectionId);
         setSuggestionsLoading(null);
       })
       .catch(() => setSuggestionsLoading(null));
+  };
+
+  const applyCopilotSuggestion = (text: string, mode: 'insert' | 'append' | 'replace') => {
+    if (!copilotPanelSectionId || !doctrine) return;
+    const sec = doctrine.sections.find((s) => s.id === copilotPanelSectionId);
+    const current = editingSectionId === copilotPanelSectionId ? editingContent : (sec?.content ?? '');
+    const next = mode === 'replace' ? text : (current + (current ? '\n\n' : '') + text);
+    setEditingSectionId(copilotPanelSectionId);
+    setEditingContent(next);
   };
 
   const markComplete = (sectionId: string) => {
@@ -196,6 +208,15 @@ export default function GovernanceDoctrine() {
     );
   }
 
+  const completenessFiltered = useMemo(() => {
+    if (!completeness) return null;
+    if (!showIncompleteOnly) return completeness;
+    return {
+      ...completeness,
+      sections: completeness.sections.filter((s) => !s.isComplete)
+    };
+  }, [completeness, showIncompleteOnly]);
+
   if (!doctrine) return null;
 
   return (
@@ -204,12 +225,22 @@ export default function GovernanceDoctrine() {
       <p className="text-slate-600 text-sm mb-6">Version {doctrine.version}{doctrine.purpose ? ` · ${doctrine.purpose}` : ''}</p>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1">
-          {completeness && (
-            <CompletenessIndexWidget data={completeness} onJumpToSection={jumpToSection} />
+        <div id="completeness" className="lg:col-span-1 lg:sticky lg:top-4 self-start">
+          {completenessFiltered && (
+            <>
+              <label className="flex items-center gap-2 mb-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={showIncompleteOnly}
+                  onChange={(e) => setShowIncompleteOnly(e.target.checked)}
+                />
+                Show incomplete only
+              </label>
+              <CompletenessIndexWidget data={completenessFiltered} onJumpToSection={jumpToSection} />
+            </>
           )}
         </div>
-        <div className="lg:col-span-2 space-y-6">
+        <div id="sections" className="lg:col-span-2 space-y-6">
           <div className="flex gap-2 items-center flex-wrap">
             <input
               type="text"
@@ -280,20 +311,31 @@ export default function GovernanceDoctrine() {
                 ) : (
                   <div className="text-sm text-slate-700 whitespace-pre-wrap">{sec.content || '—'}</div>
                 )}
-                {Array.isArray(sec.copilot_suggestions) && sec.copilot_suggestions.length > 0 && (
+                {copilotPanelSectionId !== sec.id && Array.isArray(sec.copilot_suggestions) && sec.copilot_suggestions.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
-                    <p className="text-xs font-medium text-slate-500 mb-1">Copilot suggestions</p>
-                    <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
-                      {sec.copilot_suggestions.map((s, i) => (
-                        <li key={i}>{s}</li>
-                      ))}
-                    </ul>
+                    <button type="button" onClick={() => setCopilotPanelSectionId(sec.id)} className="text-sm text-gov-blue hover:underline">Open suggestions in panel</button>
                   </div>
                 )}
               </div>
             ))}
         </div>
       </div>
+
+      {copilotPanelSectionId && doctrine && (() => {
+        const sec = doctrine.sections.find((s) => s.id === copilotPanelSectionId);
+        const suggestions = (sec?.copilot_suggestions ?? []) as string[];
+        if (suggestions.length === 0) return null;
+        return (
+          <div className="fixed right-4 top-24 bottom-24 w-96 max-w-[calc(100vw-2rem)] z-10">
+            <CopilotSuggestionsPanel
+              suggestions={suggestions}
+              onClose={() => setCopilotPanelSectionId(null)}
+              onApply={applyCopilotSuggestion}
+              visible
+            />
+          </div>
+        );
+      })()}
     </div>
   );
 }

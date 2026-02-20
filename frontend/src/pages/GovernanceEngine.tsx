@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import RiskBadge from '../components/governance/RiskBadge';
+import ProposalsWidget from '../components/dashboard/ProposalsWidget';
+import GovernanceDoctrineWidget from '../components/dashboard/GovernanceDoctrineWidget';
 
 interface DashboardData {
   cards: { openDrafts: number; awaitingApproval: number; escalations: number; finalized: number; highRisk: number; avgRisk: number };
@@ -60,8 +62,10 @@ export default function GovernanceEngine() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow p-6 border border-slate-100">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+        <ProposalsWidget />
+        <GovernanceDoctrineWidget />
+        <div className="bg-white rounded-xl shadow p-6 border border-slate-100 md:col-span-2 lg:col-span-1">
           <h2 className="font-display font-semibold text-lg text-gov-navy mb-4">Risk Distribution</h2>
           <div className="flex gap-6">
             {[1, 2, 3, 4].map((l) => (

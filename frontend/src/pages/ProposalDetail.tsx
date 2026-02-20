@@ -1,9 +1,10 @@
 /**
- * Phase 2: Proposal detail — sections, forms, Copilot suggestions, generate document.
+ * Phase 2 + 5: Proposal detail — sections, forms, Copilot panel, drag-drop reorder, status actions.
  */
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import client from '../api/client';
+import CopilotSuggestionsPanel from '../components/copilot/CopilotSuggestionsPanel';
 
 interface ProposalSection {
   id: string;
@@ -51,6 +52,9 @@ export default function ProposalDetail() {
   const [newFormName, setNewFormName] = useState('');
   const [newFormQmsId, setNewFormQmsId] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [copilotPanelSectionId, setCopilotPanelSectionId] = useState<string | null>(null);
+  const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
+  const [formActionMessage, setFormActionMessage] = useState<string | null>(null);
 
   const load = () => {
     if (!id) return;
@@ -109,9 +113,30 @@ export default function ProposalDetail() {
             )
           };
         });
+        setCopilotPanelSectionId(sectionId);
         setSuggestionsLoading(null);
       })
       .catch(() => setSuggestionsLoading(null));
+  };
+
+  const applyCopilotSuggestion = (text: string, mode: 'insert' | 'append' | 'replace') => {
+    if (!copilotPanelSectionId || !proposal) return;
+    const sec = proposal.sections.find((s) => s.id === copilotPanelSectionId);
+    const current = editingSectionId === copilotPanelSectionId ? editingSectionContent : (sec?.content ?? '');
+    const next = mode === 'replace' ? text : (current + (current ? '\n\n' : '') + text);
+    setEditingSectionId(copilotPanelSectionId);
+    setEditingSectionContent(next);
+  };
+
+  const reorderSections = (fromIndex: number, toIndex: number) => {
+    if (!proposal || fromIndex === toIndex) return;
+    const sorted = [...proposal.sections].sort((a, b) => a.order - b.order);
+    const [removed] = sorted.splice(fromIndex, 1);
+    sorted.splice(toIndex, 0, removed);
+    setSaving(true);
+    Promise.all(
+      sorted.map((s, i) => client.put(`/proposals/sections/${s.id}`, { order: i }))
+    ).then(() => { load(); setSaving(false); setDraggedSectionId(null); }).catch(() => setSaving(false));
   };
 
   const addForm = () => {
@@ -129,7 +154,12 @@ export default function ProposalDetail() {
     }
     setSaving(true);
     client.post(`/proposals/${id}/forms`, { formName: name, qmsDocumentId: qmsId, formData: {} })
-      .then(() => { setShowAddForm(false); setFormTemplateSelect(''); setNewFormName(''); setNewFormQmsId(''); load(); setSaving(false); })
+      .then(() => {
+        setShowAddForm(false); setFormTemplateSelect(''); setNewFormName(''); setNewFormQmsId('');
+        setFormActionMessage('Form added. Add form data and save to complete.');
+        setTimeout(() => setFormActionMessage(null), 5000);
+        load(); setSaving(false);
+      })
       .catch(() => setSaving(false));
   };
 
@@ -198,7 +228,8 @@ export default function ProposalDetail() {
             <p className="text-sm text-slate-500 mt-1">Deadline: {new Date(proposal.submission_deadline).toLocaleDateString()}</p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-sm font-medium text-slate-600">Status:</span>
           <select
             value={proposal.status}
             onChange={(e) => updateProposal({ status: e.target.value })}
@@ -210,6 +241,16 @@ export default function ProposalDetail() {
             <option value="AWARDED">Awarded</option>
             <option value="ARCHIVED">Archived</option>
           </select>
+          {proposal.status === 'DRAFT' && (
+            <button type="button" onClick={() => updateProposal({ status: 'IN_REVIEW' })} className="px-3 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:opacity-90">
+              Submit for Review
+            </button>
+          )}
+          {proposal.status === 'IN_REVIEW' && (
+            <button type="button" onClick={() => updateProposal({ status: 'SUBMITTED' })} className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:opacity-90">
+              Approve Proposal
+            </button>
+          )}
           <button
             onClick={generateDocument}
             disabled={generateLoading}
@@ -236,13 +277,33 @@ export default function ProposalDetail() {
             Add Section
           </button>
         </div>
+        <p className="text-xs text-slate-500 mb-2">Drag sections to reorder.</p>
         <div className="space-y-4">
           {proposal.sections
             .sort((a, b) => a.order - b.order)
-            .map((sec) => (
-              <div key={sec.id} className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
+            .map((sec, idx) => (
+              <div
+                key={sec.id}
+                draggable
+                onDragStart={() => setDraggedSectionId(sec.id)}
+                onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-gov-blue/30'); }}
+                onDragLeave={(e) => e.currentTarget.classList.remove('ring-2', 'ring-gov-blue/30')}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.currentTarget.classList.remove('ring-2', 'ring-gov-blue/30');
+                  const sorted = [...proposal.sections].sort((a, b) => a.order - b.order);
+                  const fromIdx = sorted.findIndex((s) => s.id === draggedSectionId);
+                  if (fromIdx !== -1) reorderSections(fromIdx, idx);
+                }}
+                onDragEnd={() => setDraggedSectionId(null)}
+                className={`bg-white border border-slate-200 rounded-lg p-4 shadow-sm ${draggedSectionId === sec.id ? 'opacity-70' : ''} cursor-grab active:cursor-grabbing`}
+              >
                 <div className="flex justify-between items-center mb-2">
-                  <h3 className="font-medium text-gov-navy">{sec.title}</h3>
+                  <span className="text-slate-400 mr-2 select-none">⋮⋮</span>
+                  <h3 className="font-medium text-gov-navy flex-1">{sec.title}</h3>
+                  {Array.isArray(sec.copilot_suggestions) && sec.copilot_suggestions.length > 0 && (
+                    <span className="text-xs bg-gov-blue/10 text-gov-navy px-2 py-0.5 rounded">Suggestions</span>
+                  )}
                   <div className="flex gap-2">
                     <button
                       onClick={() => getSuggestions(sec.id, false)}
@@ -276,14 +337,10 @@ export default function ProposalDetail() {
                 ) : (
                   <div className="text-sm text-slate-700 whitespace-pre-wrap">{sec.content || '—'}</div>
                 )}
-                {Array.isArray(sec.copilot_suggestions) && sec.copilot_suggestions.length > 0 && (
+                {copilotPanelSectionId !== sec.id && Array.isArray(sec.copilot_suggestions) && sec.copilot_suggestions.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-100">
                     <p className="text-xs font-medium text-slate-500 mb-1">Copilot suggestions</p>
-                    <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
-                      {sec.copilot_suggestions.map((s, i) => (
-                        <li key={i}>{s}</li>
-                      ))}
-                    </ul>
+                    <button type="button" onClick={() => setCopilotPanelSectionId(sec.id)} className="text-sm text-gov-blue hover:underline">Open in panel</button>
                   </div>
                 )}
               </div>
@@ -291,9 +348,29 @@ export default function ProposalDetail() {
         </div>
       </section>
 
+      {copilotPanelSectionId && (() => {
+        const sec = proposal.sections.find((s) => s.id === copilotPanelSectionId);
+        const suggestions = (sec?.copilot_suggestions ?? []) as string[];
+        if (suggestions.length === 0) return null;
+        return (
+          <div className="fixed right-4 top-24 bottom-24 w-96 max-w-[calc(100vw-2rem)] z-10">
+            <CopilotSuggestionsPanel
+              suggestions={suggestions}
+              onClose={() => setCopilotPanelSectionId(null)}
+              onApply={applyCopilotSuggestion}
+              visible
+            />
+          </div>
+        );
+      })()}
+
       {/* Forms */}
-      <section>
+      <section className="relative">
         <h2 className="text-lg font-semibold text-gov-navy mb-3">Forms</h2>
+        {formActionMessage && (
+          <p className="mb-3 text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2">{formActionMessage}</p>
+        )}
+        <p className="text-xs text-slate-500 mb-2">1. Select template → 2. Fill data (Edit form data) → 3. Download completed form when ready.</p>
         {!showAddForm ? (
           <button onClick={() => setShowAddForm(true)} disabled={saving} className="mb-3 px-4 py-2 border border-gov-blue text-gov-blue rounded-lg text-sm font-medium hover:bg-gov-blue hover:text-white disabled:opacity-50">
             Add Form
@@ -348,7 +425,7 @@ export default function ProposalDetail() {
                   Edit form data
                 </button>
                 {(f.completed_qms_document_id || f.download_url) && (
-                  <button onClick={() => downloadCompletedForm(f.id)} className="text-sm text-gov-blue hover:underline font-medium">
+                  <button onClick={() => downloadCompletedForm(f.id)} className="px-3 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium hover:opacity-90">
                     Download completed form
                   </button>
                 )}
