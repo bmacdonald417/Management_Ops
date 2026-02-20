@@ -13,7 +13,7 @@
  */
 import { query, pool } from '../db/connection.js';
 import { loadAndParseFAR52, loadAndParseDFARS252 } from '../services/regulatoryParser.js';
-import { classifyClauseRisk } from '../services/clauseRiskEngine.js';
+import { classifyClauseRiskForIngest } from '../services/solicitationRiskEngine.js';
 import { upsertDocument } from '../services/complianceKB/ingest.js';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -217,7 +217,7 @@ async function runIngestion(): Promise<IngestResult> {
   ];
 
   for (const clause of allClauses) {
-    const risk = classifyClauseRisk(clause.clauseNumber);
+    const risk = classifyClauseRiskForIngest(clause.clauseNumber);
     const row = {
       regulationType: clause.regulationType,
       part: clause.part,

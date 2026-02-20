@@ -34,11 +34,21 @@ import AdminComplianceRegistry from './pages/AdminComplianceRegistry';
 import AdminRegulatoryLibrary from './pages/AdminRegulatoryLibrary';
 import AdminAISettings from './pages/AdminAISettings';
 import Login from './pages/Login';
+import Onboarding from './pages/Onboarding';
+
+const ADMIN_ROLES = ['Level 1', 'Level 3'];
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  if (!user || !ADMIN_ROLES.includes(user.role)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -55,6 +65,7 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="onboarding" element={<Onboarding />} />
         <Route path="contracts" element={<Contracts />} />
         <Route path="contracts/:id" element={<ContractDetail />} />
         <Route path="compliance" element={<Compliance />} />
@@ -82,9 +93,9 @@ function AppRoutes() {
         <Route path="governance-engine/proposals/new" element={<ProposalNew />} />
         <Route path="governance-engine/proposals/:id" element={<ProposalDetail />} />
         <Route path="governance-engine/doctrine" element={<GovernanceDoctrine />} />
-        <Route path="admin/compliance-registry" element={<AdminComplianceRegistry />} />
-        <Route path="admin/regulatory-library" element={<AdminRegulatoryLibrary />} />
-        <Route path="admin/ai-settings" element={<AdminAISettings />} />
+        <Route path="admin/compliance-registry" element={<RequireAdmin><AdminComplianceRegistry /></RequireAdmin>} />
+        <Route path="admin/regulatory-library" element={<RequireAdmin><AdminRegulatoryLibrary /></RequireAdmin>} />
+        <Route path="admin/ai-settings" element={<RequireAdmin><AdminAISettings /></RequireAdmin>} />
         <Route path="financials" element={<Financials />} />
         <Route path="cyber" element={<Cyber />} />
       </Route>

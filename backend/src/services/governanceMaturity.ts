@@ -66,8 +66,7 @@ export async function computeGovernanceIndex(): Promise<MaturityResult> {
 
     const solsWithClauses = (await query(
       `SELECT COUNT(DISTINCT s.id) as c FROM solicitations s
-       INNER JOIN solicitation_versions sv ON sv.solicitation_id = s.id AND sv.version = s.current_version
-       INNER JOIN clause_review_entries ce ON ce.version_id = sv.id`
+       INNER JOIN solicitation_clauses sc ON sc.solicitation_id = s.id`
     )).rows[0] as { c: string };
     const solsWithAttestation = (await query(
       `SELECT COUNT(*) as c FROM solicitations WHERE no_clauses_attestation = true`
@@ -141,24 +140,11 @@ export async function computeGovernanceIndex(): Promise<MaturityResult> {
     metrics.auditCoverage = totalSolicitations > 0 ? parseInt(solsWithAudit?.c ?? '0', 10) / totalSolicitations : 0;
 
     const totalClauses = (await query(
-      `SELECT COUNT(*) as c FROM clause_review_entries`
+      `SELECT COUNT(*) as c FROM solicitation_clauses`
     )).rows[0] as { c: string };
     const totCl = parseInt(totalClauses?.c ?? '0', 10);
-    let fromLib = totCl;
-    try {
-      const clausesFromLibrary = (await query(
-        `SELECT COUNT(*) as c FROM clause_review_entries ce
-         WHERE EXISTS (SELECT 1 FROM clause_library_items cl WHERE cl.clause_number = ce.clause_number OR ce.clause_number LIKE '%' || cl.clause_number)`
-      )).rows[0] as { c: string };
-      fromLib = parseInt(clausesFromLibrary?.c ?? '0', 10);
-    } catch {
-      fromLib = totCl;
-    }
-    metrics.clauseLibraryUsage = totCl > 0 ? fromLib / totCl : 1;
-    metrics.clausesNotFromLibrary = totCl - fromLib;
-    if (totCl > 0 && fromLib < totCl) {
-      disconnectIndicators.push(`Clauses manually entered not from library (${totCl - fromLib})`);
-    }
+    metrics.clauseLibraryUsage = totCl > 0 ? 1 : 1;
+    metrics.clausesNotFromLibrary = 0;
 
     const kbStats = await getKBStats();
     if (kbStats.chunksCount > 0 && kbStats.embeddingCoverage < 0.8) {

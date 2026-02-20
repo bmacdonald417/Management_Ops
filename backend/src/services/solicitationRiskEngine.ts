@@ -216,3 +216,24 @@ export function assessClauseRisk(
 export function getHardStopClauses(): string[] {
   return [...HARD_STOP_CLAUSES];
 }
+
+/**
+ * Classification for regulatory ingest (replaces clauseRiskEngine.classifyClauseRisk).
+ * Returns risk category, 1-4 score, and flow-down for storage in regulatory_clauses / unified_clause_master.
+ */
+export function classifyClauseRiskForIngest(clauseNumber: string, category?: string | null): {
+  riskCategory: string;
+  riskScore: number;
+  flowDownRequired: boolean;
+} {
+  const n = normalizeClauseNumber(clauseNumber);
+  if (isHardStopClause(n) || isCyberCmmc(n, category ?? undefined)) {
+    return { riskCategory: 'Cyber/CUI', riskScore: 4, flowDownRequired: true };
+  }
+  if (/^52\.249/.test(n)) return { riskCategory: 'Financial Exposure', riskScore: 4, flowDownRequired: false };
+  if (/^52\.243/.test(n)) return { riskCategory: 'Scope Change', riskScore: 3, flowDownRequired: false };
+  if (/^52\.215/.test(n)) return { riskCategory: 'Audit/Pricing', riskScore: 4, flowDownRequired: false };
+  if (/^52\.219/.test(n)) return { riskCategory: 'Small Business', riskScore: 3, flowDownRequired: false };
+  if (/^52\.222/.test(n)) return { riskCategory: 'Labor', riskScore: 3, flowDownRequired: false };
+  return { riskCategory: 'General', riskScore: 1, flowDownRequired: false };
+}

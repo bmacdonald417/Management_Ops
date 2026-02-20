@@ -55,7 +55,7 @@ export default function GovernanceSolicitationEngineDetail() {
   const [pastedText, setPastedText] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [blockers, setBlockers] = useState<{ canApprove: boolean; blockers: { code: string; severity: string; message: string; remediation: string }[] } | null>(null);
+  const [blockers, setBlockers] = useState<{ canApprove: boolean; blockers: { code: string; severity: string; message: string; remediation: string; actionSolicitationClauseId?: string }[] } | null>(null);
   const [completeness, setCompleteness] = useState<{ percentComplete: number } | null>(null);
   const [riskLog, setRiskLog] = useState<Record<string, unknown> | null>(null);
   const [regulatoryClauses, setRegulatoryClauses] = useState<{ id: string; clause_number: string; title: string }[]>([]);
@@ -227,9 +227,14 @@ export default function GovernanceSolicitationEngineDetail() {
           <div className="font-medium mb-1">Cannot approve to bid until:</div>
           <ul className="list-disc list-inside space-y-1">
             {blockers.blockers.map((b, i) => (
-              <li key={i}>
+              <li key={i} className="flex flex-wrap items-center gap-1">
                 <span className="font-medium">{b.message}</span>
                 {b.remediation && <span className="text-amber-700"> — {b.remediation}</span>}
+                {b.actionSolicitationClauseId && id && (
+                  <Link to={`/governance-engine/solicitations/${id}/engine/assess/${b.actionSolicitationClauseId}`} className="text-gov-blue hover:underline font-medium">
+                    Resolve
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
@@ -408,9 +413,14 @@ export default function GovernanceSolicitationEngineDetail() {
                   <div className="font-medium mb-2">Blockers</div>
                   <ul className="space-y-1">
                     {blockers.blockers.map((b, i) => (
-                      <li key={i} className="flex gap-2">
+                      <li key={i} className="flex gap-2 flex-wrap items-center">
                         <span className="font-medium">{b.message}</span>
                         <span className="text-amber-700">— {b.remediation}</span>
+                        {b.actionSolicitationClauseId && id && (
+                          <Link to={`/governance-engine/solicitations/${id}/engine/assess/${b.actionSolicitationClauseId}`} className="text-gov-blue hover:underline font-medium">
+                            Resolve
+                          </Link>
+                        )}
                       </li>
                     ))}
                   </ul>

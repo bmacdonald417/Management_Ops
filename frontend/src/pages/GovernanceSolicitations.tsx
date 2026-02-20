@@ -29,18 +29,12 @@ export default function GovernanceSolicitations() {
   useEffect(() => {
     const params: Record<string, string> = {};
     searchParams.forEach((v, k) => { params[k] = v; });
-    Promise.all([
-      client.get('/solicitations', { params }),
-      client.get('/governance/solicitations', { params }).catch(() => ({ data: [] }))
-    ]).then(([r1, r2]) => {
-      const engine = (r1.data ?? []) as Solicitation[];
-      const legacy = (r2.data ?? []) as Solicitation[];
-      const seen = new Set(engine.map((s) => s.id));
-      const combined = [...engine, ...legacy.filter((s) => !seen.has(s.id))];
-      combined.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-      setSols(combined);
+    client.get('/solicitations', { params }).then((r) => {
+      const list = (r.data ?? []) as Solicitation[];
+      list.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      setSols(list);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, [searchParams]);
 
   const statusColors: Record<string, string> = {
@@ -57,21 +51,13 @@ export default function GovernanceSolicitations() {
     FINALIZED: 'bg-green-100 text-green-800'
   };
 
-  const useEngine = (s: Solicitation) =>
-    ['CLAUSE_EXTRACTION_PENDING', 'CLAUSE_EXTRACTION_COMPLETE', 'REVIEW_IN_PROGRESS', 'REVIEW_COMPLETE', 'APPROVAL_REQUIRED', 'APPROVED_TO_BID'].includes(s.status);
-
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="font-display font-bold text-2xl text-gov-navy">Solicitations</h1>
-        <div className="flex gap-2">
-          <Link to="/governance-engine/solicitations/engine/new" className="px-4 py-2 bg-gov-blue text-white rounded-lg font-medium hover:bg-gov-blue-light">
-            New (Engine)
-          </Link>
-          <Link to="/governance-engine/solicitations/new" className="px-4 py-2 border border-gov-blue text-gov-blue rounded-lg font-medium">
-            New (Legacy)
-          </Link>
-        </div>
+        <Link to="/governance-engine/solicitations/engine/new" className="px-4 py-2 bg-gov-blue text-white rounded-lg font-medium hover:bg-gov-blue-light">
+          New solicitation
+        </Link>
       </div>
 
       <div className="flex gap-2 mb-4">
@@ -104,7 +90,7 @@ export default function GovernanceSolicitations() {
               {sols.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4">
-                    <Link to={useEngine(s) ? `/governance-engine/solicitations/${s.id}/engine` : `/governance-engine/solicitations/${s.id}/review`} className="font-medium text-gov-blue hover:underline">
+                    <Link to={`/governance-engine/solicitations/${s.id}/engine`} className="font-medium text-gov-blue hover:underline">
                       {s.solicitation_number}
                     </Link>
                     <div className="text-xs text-slate-500">{s.title}</div>
@@ -127,7 +113,7 @@ export default function GovernanceSolicitations() {
                   </td>
                   <td className="px-6 py-4 text-sm">{s.owner_name ?? '—'}</td>
                   <td className="px-6 py-4">
-                    <Link to={useEngine(s) ? `/governance-engine/solicitations/${s.id}/engine` : `/governance-engine/solicitations/${s.id}/review`} className="text-gov-blue hover:underline text-sm">
+                    <Link to={`/governance-engine/solicitations/${s.id}/engine`} className="text-gov-blue hover:underline text-sm">
                       View / Continue
                     </Link>
                   </td>
@@ -137,7 +123,7 @@ export default function GovernanceSolicitations() {
           </table>
           {sols.length === 0 && (
             <div className="p-12 text-center text-slate-500">
-              No solicitations found. <Link to="/governance-engine/solicitations/new" className="text-gov-blue hover:underline">Create one</Link>.
+              No solicitations found. <Link to="/governance-engine/solicitations/engine/new" className="text-gov-blue hover:underline">Create one</Link>.
             </div>
           )}
         </div>

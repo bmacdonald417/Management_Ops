@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import client from '../api/client';
+import EmptyState from '../components/EmptyState';
 
 interface Contract {
   id: string;
@@ -99,7 +100,11 @@ export default function Contracts() {
             </tbody>
           </table>
           {contracts.length === 0 && (
-            <div className="p-12 text-center text-slate-500">No contracts found. Run db:seed to add sample data.</div>
+            <EmptyState
+              title="No contracts yet"
+              description="Add your first contract to track opportunities, compliance, and risk."
+              primaryAction={{ label: 'Go to Dashboard', to: '/' }}
+            />
           )}
         </div>
       )}

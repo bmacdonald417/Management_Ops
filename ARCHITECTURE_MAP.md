@@ -1,6 +1,6 @@
 # MacTech Governance Platform — Full System Architecture Map
 
-> Analysis-only report. No code modified.
+> Post-consolidation: Legacy solicitation workflow deprecated; single engine, unified risk, clause SSOT. See docs/LEGACY_DEPENDENCY_MAP.md and docs/DESIGN_SYSTEM.md.
 
 ---
 
@@ -112,14 +112,14 @@ frontend/
 └── dist/
 ```
 
-### Overlapping / Duplicate Modules
+### Post-consolidation (single workflow, unified risk, clause SSOT)
 
-| Area | Duplication |
-|------|-------------|
-| **Clause sources** | `clause_library_items`, `regulatory_clauses`, `compliance_clauses`, `clause_master` — 4 tables storing clauses |
-| **Clause library UI** | `GovernanceClauseLibrary` vs `AdminRegulatoryLibrary` — different backends |
-| **Solicitation flows** | Legacy (clause_review_entries) vs Engine (solicitation_clauses) — parallel workflows |
-| **Risk scoring** | `governanceScoring.ts`, `solicitationRiskEngine.ts`, `clauseRiskEngine.ts` — 3 engines |
+| Area | Current state |
+|------|----------------|
+| **Solicitation workflow** | Engine only: `solicitation_clauses` → `clause_risk_assessments`. Legacy routes return 410; use `/api/solicitations`. |
+| **Risk scoring** | `solicitationRiskEngine` only (runtime + ingest via `classifyClauseRiskForIngest`). `governanceScoring` / `clauseRiskEngine` deprecated for new code. |
+| **Clause SSOT** | `unified_clause_master` (base from `regulatory_clauses` + overlay). `contract_clauses` has optional `unified_clause_master_id`. Validation: GET `/api/admin/clause-ssot-validation`. |
+| **GCI / Auto-builder** | Read from `solicitation_clauses` and `clause_risk_assessments` only. |
 
 ---
 
@@ -538,8 +538,7 @@ npm run build
 
 ## Summary
 
-- **4 clause tables** with overlapping content and no sync.
-- **3 risk engines** with different models and no shared config.
-- **2 solicitation workflows** (legacy vs engine) with split maturity/reporting.
-- **Startup** is clear: migrate → optional ingest → API.
-- **Refactor** should prioritize: single clause source, unified risk engine, single solicitation workflow, then API consolidation.
+- **Clause SSOT:** `unified_clause_master`; regulatory ingest and migrateClauseData populate it. Contract clause link via `contract_clauses.unified_clause_master_id` (migration 020).
+- **Single risk engine:** `solicitationRiskEngine` (runtime + ingest classification). GCI and Auto-builder use engine tables only.
+- **Single solicitation workflow:** Engine only; legacy routes return 410. Migration script: `npm run migrate:legacy-solicitations`.
+- **Startup:** migrate → optional ingest → API. Frontend: unified Pre-Bid nav, Admin RBAC, onboarding, empty states, approve-to-bid blocker deep-links.

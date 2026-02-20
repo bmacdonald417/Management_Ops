@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { getOnboardingCompleted } from './Onboarding';
 
 interface KPIs {
   contracts: { active: number; opportunities: number; total: number };
@@ -21,6 +22,14 @@ export default function Dashboard() {
 
   return (
     <div>
+      {!getOnboardingCompleted() && (
+        <div className="mb-6 p-4 bg-gov-blue/10 border border-gov-blue/30 rounded-lg flex items-center justify-between">
+          <span className="text-gov-navy">First time here? Complete setup to get the most out of the platform.</span>
+          <Link to="/onboarding" className="px-4 py-2 bg-gov-blue text-white rounded-lg text-sm font-medium">
+            Start setup
+          </Link>
+        </div>
+      )}
       <h1 className="font-display font-bold text-2xl text-gov-navy mb-6">Executive Dashboard</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

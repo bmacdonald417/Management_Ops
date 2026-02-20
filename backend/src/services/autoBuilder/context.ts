@@ -101,8 +101,7 @@ export async function loadAutoBuilderContext(): Promise<AutoBuilderContext> {
     const totalSols = parseInt(((await query(`SELECT COUNT(*) as c FROM solicitations`)).rows[0] as { c: string })?.c ?? '0', 10);
     const withClauses = parseInt(((await query(
       `SELECT COUNT(DISTINCT s.id) as c FROM solicitations s
-       INNER JOIN solicitation_versions sv ON sv.solicitation_id = s.id AND sv.version = s.current_version
-       INNER JOIN clause_review_entries ce ON ce.version_id = sv.id`
+       INNER JOIN solicitation_clauses sc ON sc.solicitation_id = s.id`
     )).rows[0] as { c: string })?.c ?? '0', 10);
     const withAttest = parseInt(((await query(`SELECT COUNT(*) as c FROM solicitations WHERE no_clauses_attestation = true`)).rows[0] as { c: string })?.c ?? '0', 10);
     const withApprovals = parseInt(((await query(`SELECT COUNT(*) as c FROM solicitations WHERE status IN ('AWAITING_APPROVALS', 'FINALIZED')`)).rows[0] as { c: string })?.c ?? '0', 10);
@@ -130,13 +129,16 @@ export async function loadAutoBuilderContext(): Promise<AutoBuilderContext> {
   }
 
   try {
-    const clauseRows = (await query(`SELECT risk_level, total_score FROM clause_review_entries`)).rows as { risk_level?: number; total_score?: number }[];
-    const l1 = clauseRows.filter((c) => (c.risk_level ?? 1) === 1).length;
-    const l2 = clauseRows.filter((c) => (c.risk_level ?? 1) === 2).length;
-    const l3 = clauseRows.filter((c) => (c.risk_level ?? 1) === 3).length;
-    const l4 = clauseRows.filter((c) => (c.risk_level ?? 1) === 4).length;
+    const clauseRows = (await query(
+      `SELECT cra.risk_level, cra.risk_score_percent FROM clause_risk_assessments cra
+       JOIN solicitation_clauses sc ON sc.id = cra.solicitation_clause_id`
+    )).rows as { risk_level?: string; risk_score_percent?: number }[];
+    const l1 = clauseRows.filter((c) => (c.risk_level ?? 'L1') === 'L1').length;
+    const l2 = clauseRows.filter((c) => c.risk_level === 'L2').length;
+    const l3 = clauseRows.filter((c) => c.risk_level === 'L3').length;
+    const l4 = clauseRows.filter((c) => c.risk_level === 'L4').length;
     const avgRisk = clauseRows.length > 0
-      ? clauseRows.reduce((s, c) => s + ((c.total_score ?? 0) as number), 0) / clauseRows.length
+      ? clauseRows.reduce((s, c) => s + ((c.risk_score_percent ?? 0) as number), 0) / clauseRows.length
       : 0;
     clauseReviewStats = { totalClausesReviewed: clauseRows.length, avgClauseRisk: avgRisk, l1, l2, l3, l4 };
   } catch {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import client from '../api/client';
 
 export default function GovernanceReports() {
@@ -31,7 +32,13 @@ export default function GovernanceReports() {
             ))}
           </tbody>
         </table>
-        {data.length === 0 && <p className="text-slate-500 py-4">No data yet. Create solicitations to see reports.</p>}
+        {data.length === 0 && (
+        <div className="py-12 text-center text-slate-600">
+          <p className="font-medium text-gov-navy mb-1">No report data yet</p>
+          <p className="text-sm mb-4">Create and complete solicitations to see status and risk reports.</p>
+          <Link to="/governance-engine/solicitations/engine/new" className="text-gov-blue hover:underline text-sm">Create a solicitation</Link>
+        </div>
+      )}
       </div>
     </div>
   );

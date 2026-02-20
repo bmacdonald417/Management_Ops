@@ -146,4 +146,29 @@ router.post('/compliance-registry/sources/:id/activate', async (req, res) => {
   res.json({ ok: true });
 });
 
+/** Clause SSOT validation: regulatory_clauses vs unified_clause_master consistency */
+router.get('/clause-ssot-validation', async (_req, res) => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  try {
+    const missing = (await query(
+      `SELECT rc.regulation_type, rc.clause_number FROM regulatory_clauses rc
+       LEFT JOIN unified_clause_master u ON u.regulation = rc.regulation_type AND u.clause_number = rc.clause_number
+       WHERE u.id IS NULL LIMIT 100`
+    )).rows as { regulation_type: string; clause_number: string }[];
+    if (missing.length > 0) {
+      errors.push(`${missing.length} regulatory_clauses row(s) have no matching unified_clause_master (run migrate:clauses or reg:ingest).`);
+    }
+    const dupes = (await query(
+      `SELECT regulation, clause_number, COUNT(*) as c FROM unified_clause_master GROUP BY regulation, clause_number HAVING COUNT(*) > 1`
+    )).rows;
+    if (dupes.length > 0) {
+      errors.push(`Duplicate (regulation, clause_number) in unified_clause_master: ${dupes.length} pair(s).`);
+    }
+  } catch (e) {
+    warnings.push('unified_clause_master may not exist: ' + (e as Error).message);
+  }
+  res.json({ ok: errors.length === 0, errors, warnings });
+});
+
 export default router;

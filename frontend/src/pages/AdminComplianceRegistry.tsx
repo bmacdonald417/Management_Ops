@@ -272,7 +272,10 @@ export default function AdminComplianceRegistry() {
       <div className="bg-white rounded-xl shadow p-6">
         <h2 className="font-display font-semibold text-lg text-gov-navy mb-4">Data Sources</h2>
         {sources.length === 0 ? (
-          <p className="text-slate-500">No data sources imported yet.</p>
+          <div className="py-8 text-center text-slate-600">
+            <p className="font-medium text-gov-navy mb-1">No data sources yet</p>
+            <p className="text-sm mb-4">Upload a CSV or JSON file above to import clauses, CMMC controls, or other reference data.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

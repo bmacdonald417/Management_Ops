@@ -53,7 +53,7 @@ export default function Login() {
           </button>
         </div>
         <p className="mt-4 text-xs text-slate-500 text-center">
-          Dev mode: uses dev-token endpoint. Run db:seed to create admin user.
+          Dev mode: uses dev-token endpoint. In production, sign in with your organization credentials.
         </p>
       </div>
     </div>

@@ -11,6 +11,8 @@ export interface BlockerItem {
   severity: 'error' | 'warning';
   message: string;
   remediation: string;
+  /** When set, frontend can deep-link to resolve (e.g. first clause that needs assessment). */
+  actionSolicitationClauseId?: string;
 }
 
 export interface ApproveToBidResult {
@@ -18,8 +20,14 @@ export interface ApproveToBidResult {
   blockers: BlockerItem[];
 }
 
-function blocker(code: string, message: string, remediation: string, severity: BlockerItem['severity'] = 'error'): BlockerItem {
-  return { code, severity, message, remediation };
+function blocker(
+  code: string,
+  message: string,
+  remediation: string,
+  severity: BlockerItem['severity'] = 'error',
+  actionSolicitationClauseId?: string
+): BlockerItem {
+  return { code, severity, message, remediation, actionSolicitationClauseId };
 }
 
 export async function getApproveToBidBlockers(solicitationId: string): Promise<ApproveToBidResult> {
@@ -30,7 +38,7 @@ export async function getApproveToBidBlockers(solicitationId: string): Promise<A
 
   const blockers: BlockerItem[] = [];
   const clauses = (await query(
-    `SELECT sc.id,
+    `SELECT sc.id AS solicitation_clause_id,
        COALESCE(u.is_flow_down, sc.is_flow_down_required) AS is_flow_down_required,
        COALESCE(u.clause_number, rc.clause_number) AS clause_number,
        cra.status AS assessment_status, cra.risk_level, cra.flowdown_review_completed
@@ -43,7 +51,7 @@ export async function getApproveToBidBlockers(solicitationId: string): Promise<A
      ) cra ON true
      WHERE sc.solicitation_id = $1 AND (u.id IS NOT NULL OR rc.id IS NOT NULL)`,
     [solicitationId]
-  )).rows as { is_flow_down_required: boolean; clause_number: string; assessment_status: string; risk_level: string; flowdown_review_completed: boolean }[];
+  )).rows as { solicitation_clause_id: string; is_flow_down_required: boolean; clause_number: string; assessment_status: string; risk_level: string; flowdown_review_completed: boolean }[];
 
   if (clauses.length === 0) {
     blockers.push(blocker(
@@ -55,20 +63,26 @@ export async function getApproveToBidBlockers(solicitationId: string): Promise<A
 
   const withoutApproved = clauses.filter((c) => c.assessment_status !== 'APPROVED');
   if (withoutApproved.length > 0) {
+    const firstId = withoutApproved[0]?.solicitation_clause_id;
     blockers.push(blocker(
       'UNASSESSED_CLAUSES',
       `${withoutApproved.length} clause(s) need approved risk assessment`,
-      'Assess each clause in Clause Review tab and submit for approval where required'
+      'Assess each clause in Clause Review tab and submit for approval where required',
+      'error',
+      firstId
     ));
   }
 
   const flowdownRequired = clauses.filter((c) => c.is_flow_down_required);
   const flowdownIncomplete = flowdownRequired.filter((c) => c.assessment_status === 'APPROVED' && !c.flowdown_review_completed);
   if (flowdownIncomplete.length > 0) {
+    const firstId = flowdownIncomplete[0]?.solicitation_clause_id;
     blockers.push(blocker(
       'FLOWDOWN_REVIEW_PENDING',
       `${flowdownIncomplete.length} flow-down-required clause(s) need Flowdown Review completed`,
-      'Complete Flowdown Review on each flow-down-required clause in the assessment'
+      'Complete Flowdown Review on each flow-down-required clause in the assessment',
+      'error',
+      firstId
     ));
   }
 

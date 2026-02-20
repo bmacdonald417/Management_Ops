@@ -40,7 +40,9 @@ export default function Financials() {
                   <span className="font-mono text-lg">{(r.rate_value * 100).toFixed(2)}%</span>
                 </div>
               ))}
-              {rates.length === 0 && <p className="text-slate-500 text-sm">No rates configured. Run db:seed.</p>}
+              {rates.length === 0 && (
+                <p className="text-slate-500 text-sm">No rates configured yet. Add rate cards to track financials.</p>
+              )}
             </div>
           )}
         </div>
