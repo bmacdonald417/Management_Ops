@@ -21,6 +21,7 @@ import GovernanceSignatureRequests from './pages/GovernanceSignatureRequests';
 import Proposals from './pages/Proposals';
 import ProposalDetail from './pages/ProposalDetail';
 import ProposalNew from './pages/ProposalNew';
+import GovernanceDoctrine from './pages/GovernanceDoctrine';
 import GovernanceAuditTrail from './pages/GovernanceAuditTrail';
 import GovernancePacketExport from './pages/GovernancePacketExport';
 import GovernanceMaturity from './pages/GovernanceMaturity';
@@ -80,6 +81,7 @@ function AppRoutes() {
         <Route path="governance-engine/proposals" element={<Proposals />} />
         <Route path="governance-engine/proposals/new" element={<ProposalNew />} />
         <Route path="governance-engine/proposals/:id" element={<ProposalDetail />} />
+        <Route path="governance-engine/doctrine" element={<GovernanceDoctrine />} />
         <Route path="admin/compliance-registry" element={<AdminComplianceRegistry />} />
         <Route path="admin/regulatory-library" element={<AdminRegulatoryLibrary />} />
         <Route path="admin/ai-settings" element={<AdminAISettings />} />
