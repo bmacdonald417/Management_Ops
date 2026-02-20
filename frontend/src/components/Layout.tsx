@@ -22,7 +22,8 @@ const governanceSubNav = [
   { path: '/governance-engine/copilot', label: 'Copilot' },
   { path: '/governance-engine/maturity', label: 'Maturity' },
   { path: '/governance-engine/reports', label: 'Reports' },
-  { path: '/governance-engine/signature-requests', label: 'Signature Requests' }
+  { path: '/governance-engine/signature-requests', label: 'Signature Requests' },
+  { path: '/governance-engine/proposals', label: 'Proposals' }
 ];
 
 export default function Layout() {
