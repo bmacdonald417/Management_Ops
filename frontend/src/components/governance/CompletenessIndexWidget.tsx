@@ -1,6 +1,7 @@
 /**
  * Phase 3: Completeness Index widget for Governance Doctrine.
  * Shows progress bar and section list with status badges; links to section by id for scroll.
+ * API returns camelCase: sectionNumber, isComplete (see getCompletenessIndex).
  */
 interface SectionItem {
   id: string;
