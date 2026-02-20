@@ -1,8 +1,10 @@
 /**
  * Phase 3: Completeness Index & Doctrine Builder API.
+ * Phase 2: Governance Builder — lifecycle phases, controlled document.
  */
 import { Router } from 'express';
 import { query } from '../db/connection.js';
+import { CONTRACT_LIFECYCLE_PHASES, getPhaseForSectionNumber } from '../services/contractLifecyclePhases.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import {
   createDoctrine,
@@ -28,6 +30,18 @@ function logAudit(entityType: string, entityId: string, action: string, actorId?
     [entityType, entityId, action, meta ? 'metadata' : null, null, meta ? JSON.stringify(meta) : null, actorId]
   ).catch((e) => console.error('Doctrine audit failed:', e));
 }
+
+// GET /api/governance-doctrine/lifecycle-phases (Phase 2.2: Contract Lifecycle Framework)
+router.get('/lifecycle-phases', (_req, res) => {
+  res.json({ phases: CONTRACT_LIFECYCLE_PHASES });
+});
+
+// GET /api/governance-doctrine/lifecycle-phases/:sectionNumber (Phase 2.2: Requirement for section)
+router.get('/lifecycle-phases/:sectionNumber', (req, res) => {
+  const phase = getPhaseForSectionNumber(decodeURIComponent(req.params.sectionNumber));
+  if (!phase) return res.status(404).json({ error: 'No phase found for section' });
+  res.json(phase);
+});
 
 // POST /api/governance-doctrine
 router.post(
@@ -65,7 +79,7 @@ router.put(
   '/:id',
   authorize(['Level 1', 'Level 2', 'Level 3', 'Level 4']),
   async (req, res) => {
-    const body = req.body as { title?: string; version?: string; purpose?: string };
+    const body = req.body as { title?: string; version?: string; purpose?: string; revision_date?: string | null; approved_by_id?: string | null; approval_placeholder?: string | null };
     const doc = await updateDoctrine(req.params.id, body);
     if (!doc) return res.status(404).json({ error: 'Not found' });
     await logAudit('GovernanceDoctrine', req.params.id, 'updated', req.user?.id);

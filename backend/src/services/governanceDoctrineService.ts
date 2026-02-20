@@ -9,6 +9,9 @@ export interface GovernanceDoctrineRow {
   title: string;
   version: string;
   purpose: string | null;
+  revision_date: string | null;
+  approved_by_id: string | null;
+  approval_placeholder: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -71,7 +74,7 @@ export async function getDoctrine(id: string): Promise<(GovernanceDoctrineRow & 
 
 export async function updateDoctrine(
   id: string,
-  data: { title?: string; version?: string; purpose?: string }
+  data: { title?: string; version?: string; purpose?: string; revision_date?: string | null; approved_by_id?: string | null; approval_placeholder?: string | null }
 ): Promise<GovernanceDoctrineRow | null> {
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -79,6 +82,9 @@ export async function updateDoctrine(
   if (data.title !== undefined) { updates.push(`title = $${i++}`); values.push(data.title); }
   if (data.version !== undefined) { updates.push(`version = $${i++}`); values.push(data.version); }
   if (data.purpose !== undefined) { updates.push(`purpose = $${i++}`); values.push(data.purpose); }
+  if (data.revision_date !== undefined) { updates.push(`revision_date = $${i++}`); values.push(data.revision_date); }
+  if (data.approved_by_id !== undefined) { updates.push(`approved_by_id = $${i++}`); values.push(data.approved_by_id); }
+  if (data.approval_placeholder !== undefined) { updates.push(`approval_placeholder = $${i++}`); values.push(data.approval_placeholder); }
   if (updates.length === 0) return (await query(`SELECT * FROM governance_doctrine WHERE id = $1`, [id])).rows[0] as GovernanceDoctrineRow | null;
   updates.push('updated_at = NOW()');
   values.push(id);
