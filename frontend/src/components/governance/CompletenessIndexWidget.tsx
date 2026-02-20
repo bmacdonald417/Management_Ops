@@ -48,12 +48,12 @@ export default function CompletenessIndexWidget({ data, onJumpToSection }: Compl
                 onClick={() => onJumpToSection(s.id)}
                 className="text-left flex-1 flex items-center gap-2 py-1 rounded hover:bg-slate-50 text-slate-700"
               >
-                <span className="font-mono text-slate-500 w-8">{s.section_number}</span>
+                <span className="font-mono text-slate-500 w-8">{s.sectionNumber}</span>
                 <span className="truncate">{s.title}</span>
               </button>
             ) : (
               <>
-                <span className="font-mono text-slate-500 w-8">{s.section_number}</span>
+                <span className="font-mono text-slate-500 w-8">{s.sectionNumber}</span>
                 <span className="truncate flex-1">{s.title}</span>
               </>
             )}

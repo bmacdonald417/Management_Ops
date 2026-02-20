@@ -196,7 +196,7 @@ export async function qmsUploadCompletedForm(
   if (!QMS_BASE_URL) return null;
   try {
     const formData = new FormData();
-    formData.append('file', new Blob([formBuffer]), metadata.fileName);
+    formData.append('file', new Blob([new Uint8Array(formBuffer)]), metadata.fileName);
     formData.append('originalQMSDocumentId', metadata.originalQMSDocumentId);
     formData.append('proposalId', metadata.proposalId);
     formData.append('formName', metadata.formName);
