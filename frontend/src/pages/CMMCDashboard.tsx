@@ -21,6 +21,7 @@ interface DashboardData {
     inherited: number;
     notApplicable: number;
     applicable: number;
+    outstanding: number;
     adjudicatedPercent: number;
     totalEvidenceFiles: number;
   };
