@@ -263,10 +263,14 @@ export async function processEvidenceBundle(fileBuffer: Buffer, userId: string):
     const { evidence } = parsed;
 
     for (const ev of evidence) {
-      const entry = zip.getEntry(ev.filename);
+      // Try the filename as-is first, then with evidence/ prefix
+      let entry = zip.getEntry(ev.filename);
+      if (!entry || entry.isDirectory) {
+        entry = zip.getEntry(`evidence/${ev.filename}`);
+      }
       if (!entry || entry.isDirectory) {
         await client.query(`UPDATE cmmc_evidence_ingest_log SET status = $1 WHERE id = $2`, [
-          `FAILURE: Evidence file not found: ${ev.filename}`,
+          `FAILURE: Evidence file not found: ${ev.filename} (tried both ${ev.filename} and evidence/${ev.filename})`,
           ingestId
         ]);
         throw new Error(`Evidence file not found: ${ev.filename}`);
@@ -319,6 +323,7 @@ export async function processEvidenceBundle(fileBuffer: Buffer, userId: string):
         const evList = (c.evidence ?? []) as { filename?: string; sha256?: string }[];
         for (const ev of evList) {
           if (ev.filename) {
+            // Store the filename as it appears in the manifest (without evidence/ prefix)
             await client.query(
               `INSERT INTO cmmc_control_evidence_files (control_id, filename, sha256, last_seen_ingest_id)
                VALUES ($1, $2, $3, $4)`,
