@@ -164,6 +164,8 @@ router.get('/cmmc-dashboard', async (req, res) => {
   // Calculate total evidence files
   const totalEvidenceFiles = rows.reduce((sum: number, r: { evidence_file_count?: number }) => sum + ((r.evidence_file_count as number) || 0), 0);
 
+  const fullyAdjudicated = implemented + governed + inherited; // Fully adjudicated = implemented + governed + inherited (excludes partial)
+  
   res.json({
     summary: {
       totalControls: TOTAL,
@@ -173,8 +175,9 @@ router.get('/cmmc-dashboard', async (req, res) => {
       inherited,
       notApplicable,
       applicable,
+      fullyAdjudicated, // Fully adjudicated (excludes partially implemented)
       outstanding: partial, // Outstanding = only partially implemented (in progress)
-      adjudicatedPercent: applicable > 0 ? Math.round(((implemented + governed + inherited) / applicable) * 100 * 100) / 100 : 0,
+      adjudicatedPercent: applicable > 0 ? Math.round((fullyAdjudicated / applicable) * 100 * 100) / 100 : 0,
       totalEvidenceFiles
     },
     buckets: [
