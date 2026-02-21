@@ -15,7 +15,8 @@ const mainNavItems = [
 const adminNavItems = [
   { path: '/admin/compliance-registry', label: 'Compliance Registry' },
   { path: '/admin/regulatory-library', label: 'Regulatory Library' },
-  { path: '/admin/ai-settings', label: 'AI Settings' }
+  { path: '/admin/ai-settings', label: 'AI Settings' },
+  { path: '/admin/cmmc-evidence', label: 'CMMC Evidence' }
 ];
 
 export default function Layout() {

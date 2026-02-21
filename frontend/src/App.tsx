@@ -33,6 +33,7 @@ import GovernanceAutoBuilderAppendices from './pages/GovernanceAutoBuilderAppend
 import AdminComplianceRegistry from './pages/AdminComplianceRegistry';
 import AdminRegulatoryLibrary from './pages/AdminRegulatoryLibrary';
 import AdminAISettings from './pages/AdminAISettings';
+import AdminCMMCEvidence from './pages/AdminCMMCEvidence';
 import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 
@@ -96,6 +97,7 @@ function AppRoutes() {
         <Route path="admin/compliance-registry" element={<RequireAdmin><AdminComplianceRegistry /></RequireAdmin>} />
         <Route path="admin/regulatory-library" element={<RequireAdmin><AdminRegulatoryLibrary /></RequireAdmin>} />
         <Route path="admin/ai-settings" element={<RequireAdmin><AdminAISettings /></RequireAdmin>} />
+        <Route path="admin/cmmc-evidence" element={<RequireAdmin><AdminCMMCEvidence /></RequireAdmin>} />
         <Route path="financials" element={<Financials />} />
         <Route path="cyber" element={<Cyber />} />
       </Route>

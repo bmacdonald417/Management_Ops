@@ -1,12 +1,46 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { query } from '../db/connection.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { auditLog } from '../middleware/audit.js';
+import { processEvidenceBundle } from '../services/evidenceIngestor.js';
 import { z } from 'zod';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage() });
 
 router.use(authenticate);
+
+router.get('/ingest-log', authorize(['Level 1', 'Level 3']), async (_req, res) => {
+  const result = await query(
+    `SELECT l.id, l.ingest_timestamp, l.status, l.bundle_version, l.trust_codex_version, l.bundle_hash, u.name as ingested_by_name
+     FROM cmmc_evidence_ingest_log l
+     LEFT JOIN users u ON l.ingested_by_user_id = u.id
+     ORDER BY l.ingest_timestamp DESC
+     LIMIT 50`
+  );
+  res.json({ rows: result.rows });
+});
+
+router.post(
+  '/ingest-evidence-bundle',
+  authorize(['Level 1', 'Level 3']),
+  upload.single('bundle'),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded. Select a .zip evidence bundle.' });
+    }
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    try {
+      const { ingestId } = await processEvidenceBundle(req.file.buffer, userId);
+      res.json({ success: true, ingestId, message: 'Ingest successful!' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Ingest failed';
+      res.status(400).json({ error: message });
+    }
+  }
+);
 
 router.get('/cmmc/controls', async (req, res) => {
   const { domain, level } = req.query;
