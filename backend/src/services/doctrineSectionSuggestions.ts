@@ -27,35 +27,32 @@ export async function getDoctrineSectionSuggestions(context: DoctrineSectionSugg
   const client = getOpenAIClient();
   if (!client) return { suggestions: [], qmsDocuments };
 
-  const doctrineContext = (context.fullDoctrineContext && context.fullDoctrineContext.trim())
-    ? `\nReference doctrine / policy context (use to align suggestions):\n${context.fullDoctrineContext.slice(0, 4000)}`
-    : '';
-
   const qmsHint = qmsDocuments.length > 0
-    ? `\nSuggested QMS/FRM documents that may fulfill this section (mention in suggestions where relevant): ${qmsDocuments.join(', ')}`
+    ? `\nQMS/FRM documents for this section: ${qmsDocuments.join(', ')}`
     : '';
 
-  const userPrompt = `You are writing assessor-ready, audit-grade policy statements for a Federal Contract Governance & Risk Management Manual. Output must be formal, declarative language suitable for CMMC, DCAA, or contractual compliance review.
+  const sectionId = [context.sectionNumber, context.sectionTitle].filter(Boolean).join(' ');
 
-Doctrine title: ${context.doctrineTitle}
-Section ${context.sectionNumber || ''}: ${context.sectionTitle}
-${context.existingContent ? `Existing content for this section:\n${context.existingContent}\n` : ''}
-${doctrineContext}
+  const userPrompt = `You are writing assessor-ready, audit-grade policy statements for a Federal Contract Governance & Risk Management Manual.
+
+CRITICAL: Generate content ONLY for this exact section. Do not generate content for any other section.
+
+Target section ONLY: ${sectionId}
+${context.existingContent ? `Existing content for this section (build on or replace):\n${context.existingContent}\n` : ''}
 ${qmsHint}
 
-Provide 2–4 ASSESSOR-READY POLICY STATEMENTS. Each statement must be:
-- Written as formal, third-person policy text (e.g., "MacTech shall...", "All contracts must...") — NOT instructions like "include X" or "consider adding Y"
-- Suitable for direct insertion into a controlled document and audit review
-- Specific to federal contracting (FAR/DFARS), risk management, and MacTech governance
-- Concise but complete; avoid filler or generic boilerplate
-
-Then, for each statement, if implementation requires procedures or forms: add IMPLEMENTATION GUIDANCE — e.g., "Implement via MAC-FRM-013 Clause Risk Log" or "Establish written procedure documenting [specific control]."
+Provide exactly 1 or 2 IN-DEPTH, COMPREHENSIVE policy statements. Each statement must:
+- Cover ONLY the topic of this section (${context.sectionTitle}) — nothing else
+- Be written as formal, third-person policy text (e.g., "MacTech shall...", "All contracts must...")
+- Be suitable for direct insertion into a controlled document and audit review
+- Be comprehensive: a full paragraph or more per suggestion, not a single sentence
+- Include implementation guidance (e.g., "Implement via MAC-FRM-XXX") where procedures/forms apply
 
 Return a JSON object with:
-- "suggestions": array of strings — each string is ONE assessor-ready policy statement (optionally followed by implementation guidance in a second paragraph or bullet). Use Markdown (bold for key terms) where helpful.
-- "qmsDocuments": array of strings — QMS/FRM forms or appendix documents required to implement (e.g., "MAC-FRM-013 Clause Risk Log", "MAC-SOP-008 Document Control Procedure")
+- "suggestions": array of 1–2 strings — each string is ONE comprehensive assessor-ready policy statement (full paragraph with implementation refs if applicable). Use Markdown (bold for key terms).
+- "qmsDocuments": array of strings — QMS/FRM forms required for this section only
 
-Do NOT output generic prompts or "what to include" guidance. Output the actual policy text and implementation references.`;
+Output ONLY content for section ${context.sectionNumber || context.sectionTitle}. Do not suggest content for other sections.`;
 
   try {
     const completion = await client.chat.completions.create({
@@ -66,11 +63,11 @@ Do NOT output generic prompts or "what to include" guidance. Output the actual p
       ],
       response_format: { type: 'json_object' },
       temperature: 0.4,
-      max_tokens: 2048
+      max_tokens: 3072
     });
     const raw = completion.choices[0]?.message?.content ?? '{}';
     const parsed = JSON.parse(raw) as { suggestions?: string[]; qmsDocuments?: string[] };
-    const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.filter((s): s is string => typeof s === 'string').slice(0, 5) : [];
+    const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions.filter((s): s is string => typeof s === 'string').slice(0, 2) : [];
     const aiQms = Array.isArray(parsed.qmsDocuments) ? parsed.qmsDocuments.filter((s): s is string => typeof s === 'string').slice(0, 10) : [];
     const mergedQms = [...new Set([...qmsDocuments, ...aiQms])];
     return { suggestions, qmsDocuments: mergedQms };

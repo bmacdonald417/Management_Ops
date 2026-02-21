@@ -16,8 +16,7 @@ import {
   updateSection,
   deleteSection,
   markSectionComplete,
-  getCompletenessIndex,
-  getDoctrineContextForSuggestions
+  getCompletenessIndex
 } from '../services/governanceDoctrineService.js';
 import { getDoctrineSectionSuggestions } from '../services/doctrineSectionSuggestions.js';
 import { z } from 'zod';
@@ -180,13 +179,11 @@ router.post(
     if (!section) return res.status(404).json({ error: 'Section not found' });
 
     const templateSection = getTemplateSection(section.section_number);
-    const fullDoctrineContext = await getDoctrineContextForSuggestions(section.governance_doctrine_id);
     const result = await getDoctrineSectionSuggestions({
       doctrineTitle: section.doctrine_title,
       sectionTitle: section.title,
       sectionNumber: section.section_number,
       existingContent: section.content ?? undefined,
-      fullDoctrineContext: fullDoctrineContext || undefined,
       qmsReferences: templateSection?.qmsReferences
     });
 
