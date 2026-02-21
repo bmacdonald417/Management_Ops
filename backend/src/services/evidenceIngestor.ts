@@ -57,6 +57,7 @@ export interface ManifestEvidence {
 export interface Manifest {
   bundleHash: string;
   bundleVersion?: string;
+  createdAt?: string;
   trustCodexVersion?: string;
   evidence?: ManifestEvidence[];
   controls?: ManifestControl[];
@@ -87,11 +88,23 @@ interface QmsManifest {
   documents: QmsManifestDoc[];
 }
 
+/**
+ * Canonical JSON stringify with sorted keys
+ * Uses JSON.stringify with a replacer to sort keys recursively
+ * This matches Trust Codex's hash computation method
+ */
 function canonicalStringify(obj: unknown): string {
-  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
-  if (Array.isArray(obj)) return '[' + obj.map(canonicalStringify).join(',') + ']';
-  const sorted = Object.keys(obj as Record<string, unknown>).sort();
-  return '{' + sorted.map((k) => JSON.stringify(k) + ':' + canonicalStringify((obj as Record<string, unknown>)[k])).join(',') + '}';
+  function sortKeys(key: string, value: unknown): unknown {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(value as Record<string, unknown>).sort()) {
+        sorted[k] = (value as Record<string, unknown>)[k];
+      }
+      return sorted;
+    }
+    return value;
+  }
+  return JSON.stringify(obj, sortKeys);
 }
 
 function sha256Hex(data: Buffer | string): string {
@@ -113,12 +126,24 @@ function parseManifest(zip: AdmZip): ParsedManifest {
     const manifest = JSON.parse(manifestRaw) as Manifest;
     if (!manifest.bundleHash) throw new Error('manifest.json requires bundleHash');
 
-    const manifestWithoutHash = { ...manifest };
-    delete (manifestWithoutHash as Record<string, unknown>).bundleHash;
+    // Create a copy without bundleHash for verification
+    const manifestWithoutHash: Record<string, unknown> = { ...manifest };
+    delete manifestWithoutHash.bundleHash;
+    
+    // Compute canonical JSON and hash
     const canonical = canonicalStringify(manifestWithoutHash);
     const computed = sha256Hex(canonical);
-    if (computed.toLowerCase() !== (manifest.bundleHash || '').toLowerCase()) {
-      throw new Error('Manifest hash mismatch');
+    const expected = (manifest.bundleHash || '').toLowerCase();
+    
+    if (computed.toLowerCase() !== expected) {
+      // Log for debugging (remove in production if needed)
+      console.error('[Ingest] Hash mismatch:', {
+        computed,
+        expected,
+        canonicalLength: canonical.length,
+        manifestKeys: Object.keys(manifestWithoutHash).sort()
+      });
+      throw new Error(`Manifest hash mismatch: computed ${computed.substring(0, 16)}... expected ${expected.substring(0, 16)}...`);
     }
 
     // Format 1: controls array (dashboard/adjudication)
