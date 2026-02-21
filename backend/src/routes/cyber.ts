@@ -173,6 +173,7 @@ router.get('/cmmc-dashboard', async (req, res) => {
       inherited,
       notApplicable,
       applicable,
+      outstanding: partial, // Outstanding = only partially implemented (in progress)
       adjudicatedPercent: applicable > 0 ? Math.round(((implemented + governed + inherited) / applicable) * 100 * 100) / 100 : 0,
       totalEvidenceFiles
     },

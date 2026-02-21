@@ -178,7 +178,7 @@ export default function CMMCDashboard() {
                 Adjudicated: {summary.applicable}/{summary.totalControls} ({summary.adjudicatedPercent}%)
               </span>
               <span className="text-gray-400">
-                Outstanding: {summary.totalControls - summary.applicable}
+                Outstanding: {summary.outstanding || summary.partiallyImplemented}
               </span>
             </div>
             <div className="h-4 bg-gray-700 rounded-full overflow-hidden mt-3">
