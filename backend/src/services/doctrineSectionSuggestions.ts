@@ -33,7 +33,7 @@ export async function getDoctrineSectionSuggestions(context: DoctrineSectionSugg
 
   const sectionId = [context.sectionNumber, context.sectionTitle].filter(Boolean).join(' ');
 
-  const userPrompt = `You are writing assessor-ready, audit-grade policy statements for a Federal Contract Governance & Risk Management Manual.
+  const userPrompt = `You are writing document-ready, audit-passable policy text for insertion into a controlled Federal Contract Governance & Risk Management Manual. Output is the actual text to be published — not suggestions, descriptions, or meta-instructions.
 
 CRITICAL: Generate content ONLY for this exact section. Do not generate content for any other section.
 
@@ -41,24 +41,27 @@ Target section ONLY: ${sectionId}
 ${context.existingContent ? `Existing content for this section (build on or replace):\n${context.existingContent}\n` : ''}
 ${qmsHint}
 
-Provide exactly 1 or 2 IN-DEPTH, COMPREHENSIVE policy statements. Each statement must:
-- Cover ONLY the topic of this section (${context.sectionTitle}) — nothing else
-- Be written as formal, third-person policy text (e.g., "MacTech shall...", "All contracts must...")
-- Be suitable for direct insertion into a controlled document and audit review
-- Be comprehensive: a full paragraph or more per suggestion, not a single sentence
-- Include implementation guidance (e.g., "Implement via MAC-FRM-XXX") where procedures/forms apply
+LANGUAGE RULES:
+- Use "this Manual" or "this document" — never "the Federal Contracting Governance & Risk Management Manual" or "the document"
+- Write as formal, third-person policy text (e.g., "MacTech shall...", "All contracts must...")
+- Output rich, audit-friendly verbiage suitable for direct insertion — no hedging, no "should consider," no meta-commentary
+- Each output must be a full paragraph or more of publication-ready text
+
+STRUCTURE: Provide exactly 1 or 2 paragraphs. Each paragraph MUST end with a sentence listing recommended controlled documents, e.g.:
+"Reference: MAC-FRM-XXX [Title], MAC-SOP-YYY [Title]."
+The user may delete the reference sentence later; include it so the text is audit-complete.
 
 Return a JSON object with:
-- "suggestions": array of 1–2 strings — each string is ONE comprehensive assessor-ready policy statement (full paragraph with implementation refs if applicable). Use Markdown (bold for key terms).
-- "qmsDocuments": array of strings — QMS/FRM forms required for this section only
+- "suggestions": array of 1–2 strings — each string is document-ready policy text (full paragraph ending with "Reference: [controlled docs]"). Use Markdown (bold for key terms).
+- "qmsDocuments": array of strings — QMS/FRM forms for this section
 
-Output ONLY content for section ${context.sectionNumber || context.sectionTitle}. Do not suggest content for other sections.`;
+Output ONLY content for section ${context.sectionNumber || context.sectionTitle}.`;
 
   try {
     const completion = await client.chat.completions.create({
       model: getOpenAIModel(),
       messages: [
-        { role: 'system', content: 'You write assessor-ready, audit-grade policy statements — formal declarative language for controlled documents. Never output "include X" or "consider Y" prompts. Output the actual policy text and implementation references. Output only valid JSON with "suggestions" (assessor-ready statements) and "qmsDocuments" arrays.' },
+        { role: 'system', content: 'You write document-ready, audit-passable policy text for controlled manuals. Use "this Manual" or "this document" — never "the document." Output publication-ready text, not suggestions. Each paragraph must end with "Reference: [controlled docs]." Output only valid JSON with "suggestions" and "qmsDocuments" arrays.' },
         { role: 'user', content: userPrompt }
       ],
       response_format: { type: 'json_object' },
