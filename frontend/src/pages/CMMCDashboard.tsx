@@ -52,6 +52,26 @@ interface DashboardData {
   } | null;
 }
 
+interface EvidenceReference {
+  control_id: string;
+  domain: string;
+  status: string;
+  filename: string;
+  sha256: string | null;
+}
+
+interface UniqueEvidenceFile {
+  filename: string;
+  sha256: string | null;
+  control_ids: string[];
+  control_count: number;
+}
+
+interface EvidenceExplorerData {
+  references: EvidenceReference[];
+  uniqueFiles: UniqueEvidenceFile[];
+}
+
 interface StatusCard {
   label: string;
   count: number;
@@ -85,6 +105,14 @@ export default function CMMCDashboard() {
   const [domainControls, setDomainControls] = useState<ControlWithEvidence[]>([]);
   const [loadingControls, setLoadingControls] = useState(false);
   const [selectedEvidenceFile, setSelectedEvidenceFile] = useState<{ filename: string; sha256: string | null } | null>(null);
+  const [selectedEvidenceControlIds, setSelectedEvidenceControlIds] = useState<string[] | null>(null);
+
+  // Evidence Explorer: load when user requests it (click evidence count or open section)
+  const [evidenceRequested, setEvidenceRequested] = useState(false);
+  const [evidenceData, setEvidenceData] = useState<EvidenceExplorerData | null>(null);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceViewMode, setEvidenceViewMode] = useState<'reference' | 'file'>('file');
+  const [evidenceFilters, setEvidenceFilters] = useState({ domain: '', status: '', filename: '' });
 
   useEffect(() => {
     client
@@ -106,6 +134,20 @@ export default function CMMCDashboard() {
       setDomainControls([]);
     }
   }, [selectedDomain]);
+
+  useEffect(() => {
+    if (!evidenceRequested || !data) return;
+    setEvidenceLoading(true);
+    const params = new URLSearchParams();
+    if (evidenceFilters.domain) params.set('domain', evidenceFilters.domain);
+    if (evidenceFilters.status) params.set('status', evidenceFilters.status);
+    if (evidenceFilters.filename.trim()) params.set('filename', evidenceFilters.filename.trim());
+    client
+      .get<EvidenceExplorerData>(`/cyber/cmmc-dashboard/evidence?${params.toString()}`)
+      .then((r) => setEvidenceData(r.data))
+      .catch(() => setEvidenceData(null))
+      .finally(() => setEvidenceLoading(false));
+  }, [evidenceRequested, data, evidenceFilters.domain, evidenceFilters.status, evidenceFilters.filename]);
 
   if (loading) {
     return (
@@ -220,12 +262,23 @@ export default function CMMCDashboard() {
           </div>
 
           <div className="mb-4">
-            <p className="text-gray-400 text-sm mb-2">
-              {summary.totalEvidenceReferences.toLocaleString()} evidence references · SHA-256 verified
-            </p>
-            <p className="text-gray-500 text-xs italic">
-              (Control × file pairs; same file may be referenced by multiple controls)
-            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setEvidenceRequested(true);
+                setTimeout(() => document.getElementById('evidence-explorer')?.scrollIntoView({ behavior: 'smooth' }), 100);
+              }}
+              className="text-left group"
+            >
+              <p className="text-gray-400 text-sm mb-2 group-hover:text-teal-400 transition">
+                <span className="underline decoration-dotted">{summary.totalEvidenceReferences.toLocaleString()} evidence references</span>
+                {' · '}
+                SHA-256 verified
+              </p>
+              <p className="text-gray-500 text-xs italic group-hover:text-gray-400 transition">
+                (Control × file pairs; same file may be referenced by multiple controls) — View all
+              </p>
+            </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-gray-700">
@@ -344,6 +397,184 @@ export default function CMMCDashboard() {
               );
             })}
           </div>
+        </div>
+
+        {/* Evidence Explorer: full dynamic view of all evidence */}
+        <div id="evidence-explorer" className="mt-12 pt-8 border-t border-gray-700">
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold">Evidence Explorer</h2>
+            {!evidenceRequested ? (
+              <button
+                type="button"
+                onClick={() => setEvidenceRequested(true)}
+                className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-medium transition"
+              >
+                Load all evidence
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400 text-sm">View:</span>
+                <button
+                  type="button"
+                  onClick={() => setEvidenceViewMode('file')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${evidenceViewMode === 'file' ? 'bg-teal-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  By file
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEvidenceViewMode('reference')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${evidenceViewMode === 'reference' ? 'bg-teal-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  By reference
+                </button>
+              </div>
+            )}
+          </div>
+
+          {evidenceRequested && (
+            <>
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <input
+                  type="text"
+                  placeholder="Filter by filename..."
+                  value={evidenceFilters.filename}
+                  onChange={(e) => setEvidenceFilters((f) => ({ ...f, filename: e.target.value }))}
+                  className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-500 w-48 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                />
+                <select
+                  value={evidenceFilters.domain}
+                  onChange={(e) => setEvidenceFilters((f) => ({ ...f, domain: e.target.value }))}
+                  className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="">All domains</option>
+                  {domains.map((d) => (
+                    <option key={d.name} value={d.name}>{d.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={evidenceFilters.status}
+                  onChange={(e) => setEvidenceFilters((f) => ({ ...f, status: e.target.value }))}
+                  className="px-3 py-2 bg-gray-800 border border-gray-600 rounded-lg text-sm text-white focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="">All statuses</option>
+                  <option value="implemented">Implemented</option>
+                  <option value="governed">Governed</option>
+                  <option value="inherited">Inherited</option>
+                  <option value="partially_implemented">In Progress</option>
+                  <option value="not_applicable">Not Applicable</option>
+                </select>
+                {(evidenceFilters.domain || evidenceFilters.status || evidenceFilters.filename.trim()) && (
+                  <button
+                    type="button"
+                    onClick={() => setEvidenceFilters({ domain: '', status: '', filename: '' })}
+                    className="px-3 py-2 text-gray-400 hover:text-white text-sm"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+
+              {evidenceLoading ? (
+                <div className="bg-gray-800 border border-gray-700 rounded-xl p-12 text-center">
+                  <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-400 mx-auto mb-3"></div>
+                  <p className="text-gray-400">Loading evidence...</p>
+                </div>
+              ) : evidenceData ? (
+                <div className="bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+                  <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+                    {evidenceViewMode === 'file' ? (
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-700/50 sticky top-0 z-10">
+                          <tr>
+                            <th className="text-left px-4 py-3 font-semibold text-gray-300">Filename</th>
+                            <th className="text-left px-4 py-3 font-semibold text-gray-300">SHA-256</th>
+                            <th className="text-right px-4 py-3 font-semibold text-gray-300">Controls</th>
+                            <th className="px-4 py-3 w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                          {evidenceData.uniqueFiles.map((f, idx) => (
+                            <tr
+                              key={`${f.filename}-${idx}`}
+                              className="hover:bg-gray-700/30 transition"
+                            >
+                              <td className="px-4 py-2.5 font-mono text-gray-200 truncate max-w-xs" title={f.filename}>{f.filename}</td>
+                              <td className="px-4 py-2.5 font-mono text-xs text-gray-500 truncate max-w-[12rem]" title={f.sha256 ?? ''}>{truncateHash(f.sha256 ?? '')}</td>
+                              <td className="px-4 py-2.5 text-right text-gray-400">{f.control_count}</td>
+                              <td className="px-4 py-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedEvidenceFile({ filename: f.filename, sha256: f.sha256 });
+                                    setSelectedEvidenceControlIds(f.control_ids);
+                                  }}
+                                  className="text-teal-400 hover:text-teal-300 text-sm"
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-700/50 sticky top-0 z-10">
+                          <tr>
+                            <th className="text-left px-4 py-3 font-semibold text-gray-300">Control</th>
+                            <th className="text-left px-4 py-3 font-semibold text-gray-300">Domain</th>
+                            <th className="text-left px-4 py-3 font-semibold text-gray-300">Status</th>
+                            <th className="text-left px-4 py-3 font-semibold text-gray-300">Filename</th>
+                            <th className="px-4 py-3 w-10"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-700">
+                          {evidenceData.references.map((r, idx) => (
+                            <tr key={`${r.control_id}-${r.filename}-${idx}`} className="hover:bg-gray-700/30 transition">
+                              <td className="px-4 py-2.5 font-mono text-gray-200">{r.control_id}</td>
+                              <td className="px-4 py-2.5 text-gray-400">{r.domain}</td>
+                              <td className="px-4 py-2.5">
+                                <span className={`px-2 py-0.5 rounded text-xs ${
+                                  r.status === 'implemented' ? 'bg-green-500/20 text-green-400' :
+                                  r.status === 'governed' ? 'bg-blue-500/20 text-blue-400' :
+                                  r.status === 'inherited' ? 'bg-purple-500/20 text-purple-400' :
+                                  r.status === 'partially_implemented' ? 'bg-amber-500/20 text-amber-400' :
+                                  'bg-gray-500/20 text-gray-400'
+                                }`}>{r.status.replace(/_/g, ' ')}</span>
+                              </td>
+                              <td className="px-4 py-2.5 font-mono text-gray-300 truncate max-w-xs" title={r.filename}>{r.filename}</td>
+                              <td className="px-4 py-2.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedEvidenceFile({ filename: r.filename, sha256: r.sha256 });
+                                    setSelectedEvidenceControlIds([r.control_id]);
+                                  }}
+                                  className="text-teal-400 hover:text-teal-300 text-sm"
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                  <div className="px-4 py-2 bg-gray-700/30 border-t border-gray-700 text-xs text-gray-500">
+                    {evidenceViewMode === 'file'
+                      ? `${evidenceData.uniqueFiles.length} unique file(s)`
+                      : `${evidenceData.references.length} reference(s)`}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 text-center text-gray-500">
+                  No evidence data. Upload an evidence bundle via Admin → CMMC Evidence.
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Bundle Info Footer */}
@@ -525,7 +756,10 @@ export default function CMMCDashboard() {
                                   {evidenceFiles.slice(0, 3).map((ev: { filename: string; sha256: string | null }, idx: number) => (
                                     <button
                                       key={idx}
-                                      onClick={() => setSelectedEvidenceFile(ev)}
+                                      onClick={() => {
+                                        setSelectedEvidenceFile(ev);
+                                        setSelectedEvidenceControlIds([control.control_id]);
+                                      }}
                                       className="w-full text-left px-2 py-1.5 bg-gray-600/30 hover:bg-gray-600/50 rounded text-xs text-gray-300 hover:text-white transition flex items-center justify-between group"
                                     >
                                       <span className="truncate flex-1">{ev.filename}</span>
@@ -558,7 +792,7 @@ export default function CMMCDashboard() {
           <>
             <div
               className="fixed inset-0 bg-black/70 z-50"
-              onClick={() => setSelectedEvidenceFile(null)}
+              onClick={() => { setSelectedEvidenceFile(null); setSelectedEvidenceControlIds(null); }}
             ></div>
             <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
               <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
@@ -566,7 +800,7 @@ export default function CMMCDashboard() {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold">Evidence File</h3>
                     <button
-                      onClick={() => setSelectedEvidenceFile(null)}
+                      onClick={() => { setSelectedEvidenceFile(null); setSelectedEvidenceControlIds(null); }}
                       className="text-gray-400 hover:text-white text-2xl"
                     >
                       ✕
@@ -583,10 +817,26 @@ export default function CMMCDashboard() {
                         <p className="text-white font-mono text-xs break-all">{selectedEvidenceFile.sha256}</p>
                       </div>
                     )}
+                    {selectedEvidenceControlIds && selectedEvidenceControlIds.length > 0 && (
+                      <div>
+                        <p className="text-sm text-gray-400 mb-1">
+                          Referenced by {selectedEvidenceControlIds.length} control{selectedEvidenceControlIds.length !== 1 ? 's' : ''}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedEvidenceControlIds.map((cid) => (
+                            <span
+                              key={cid}
+                              className="px-2 py-1 bg-gray-700/50 rounded text-xs font-mono text-gray-300"
+                            >{cid}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="pt-4 border-t border-gray-700">
                       <p className="text-sm text-gray-400">
                         This evidence file is stored in the evidence bundle ZIP. To view the contents,
-                        extract the bundle and navigate to the <code className="bg-gray-700/50 px-1 rounded">evidence/</code> directory.
+                        extract the bundle and navigate to the <code className="bg-gray-700/50 px-1 rounded">evidence/</code> directory
+                        (or <code className="bg-gray-700/50 px-1 rounded">evidence/azure/</code>, <code className="bg-gray-700/50 px-1 rounded">evidence/governance/</code> for subfolders).
                       </p>
                     </div>
                   </div>

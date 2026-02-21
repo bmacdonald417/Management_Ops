@@ -202,7 +202,7 @@ router.get('/cmmc-dashboard', async (req, res) => {
 // Get controls for a specific domain with evidence files
 router.get('/cmmc-dashboard/domain/:domain', async (req, res) => {
   const { domain } = req.params;
-  
+
   const controls = await query(
     `SELECT ac.*, 
        COALESCE(
@@ -216,8 +216,62 @@ router.get('/cmmc-dashboard/domain/:domain', async (req, res) => {
      ORDER BY ac.control_id`,
     [domain]
   );
-  
+
   res.json({ controls: controls.rows });
+});
+
+// Get all evidence references (control × file) with optional filters; plus unique files view
+router.get('/cmmc-dashboard/evidence', async (req, res) => {
+  const { domain, control_id, status, filename } = req.query;
+
+  let sql = `
+    SELECT ac.control_id, ac.domain, ac.status, f.filename, f.sha256
+    FROM cmmc_control_evidence_files f
+    JOIN cmmc_adjudicated_controls ac ON ac.control_id = f.control_id
+    WHERE 1=1
+  `;
+  const params: unknown[] = [];
+  let i = 1;
+  if (domain && typeof domain === 'string') {
+    sql += ` AND ac.domain = $${i++}`;
+    params.push(domain);
+  }
+  if (control_id && typeof control_id === 'string') {
+    sql += ` AND ac.control_id = $${i++}`;
+    params.push(control_id);
+  }
+  if (status && typeof status === 'string') {
+    sql += ` AND ac.status = $${i++}`;
+    params.push(status);
+  }
+  if (filename && typeof filename === 'string' && filename.trim()) {
+    sql += ` AND f.filename ILIKE $${i++}`;
+    params.push(`%${filename.trim()}%`);
+  }
+  sql += ` ORDER BY f.filename ASC, ac.control_id ASC`;
+
+  const refResult = await query(sql, params);
+  const references = refResult.rows as { control_id: string; domain: string; status: string; filename: string; sha256: string | null }[];
+
+  // Unique files: group by (filename, sha256), list control_ids
+  const fileMap = new Map<string, { filename: string; sha256: string | null; control_ids: string[] }>();
+  for (const r of references) {
+    const key = `${r.filename}\0${r.sha256 ?? ''}`;
+    const existing = fileMap.get(key);
+    if (existing) {
+      if (!existing.control_ids.includes(r.control_id)) existing.control_ids.push(r.control_id);
+    } else {
+      fileMap.set(key, { filename: r.filename, sha256: r.sha256, control_ids: [r.control_id] });
+    }
+  }
+  const uniqueFiles = Array.from(fileMap.values()).map((f) => ({
+    filename: f.filename,
+    sha256: f.sha256,
+    control_ids: f.control_ids.sort(),
+    control_count: f.control_ids.length
+  }));
+
+  res.json({ references, uniqueFiles });
 });
 
 router.get('/cmmc/controls', async (req, res) => {
