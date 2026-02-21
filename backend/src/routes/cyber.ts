@@ -116,6 +116,82 @@ router.get('/dashboard-summary', async (_req, res) => {
   });
 });
 
+router.get('/cmmc-dashboard', async (req, res) => {
+  const controls = await query('SELECT * FROM cmmc_adjudicated_controls ORDER BY control_id');
+  const rows = controls.rows;
+
+  const TOTAL = 110;
+  const byStatus = (status: string) => rows.filter((r: { status: string }) => r.status === status).length;
+  const implemented = byStatus('implemented');
+  const governed = byStatus('governed');
+  const inherited = byStatus('inherited');
+  const notApplicable = byStatus('not_applicable');
+  const partial = byStatus('partially_implemented');
+  const applicable = TOTAL - notApplicable;
+
+  // Get latest ingest info
+  const ingestLog = await query(
+    `SELECT bundle_version, trust_codex_version, bundle_hash, ingest_timestamp 
+     FROM cmmc_evidence_ingest_log 
+     WHERE status = 'SUCCESS' 
+     ORDER BY ingest_timestamp DESC 
+     LIMIT 1`
+  );
+  const latestIngest = ingestLog.rows[0] || null;
+
+  // Domain rollup
+  const domainMap: Record<string, any> = {};
+  for (const row of rows) {
+    const domain = row.domain as string;
+    if (!domainMap[domain]) {
+      domainMap[domain] = {
+        name: domain,
+        total: 0,
+        implemented: 0,
+        partially_implemented: 0,
+        governed: 0,
+        inherited: 0,
+        not_applicable: 0,
+        evidenceFiles: 0
+      };
+    }
+    domainMap[domain].total++;
+    const status = row.status as string;
+    domainMap[domain][status] = (domainMap[domain][status] ?? 0) + 1;
+    domainMap[domain].evidenceFiles += (row.evidence_file_count as number) || 0;
+  }
+
+  // Calculate total evidence files
+  const totalEvidenceFiles = rows.reduce((sum: number, r: { evidence_file_count?: number }) => sum + ((r.evidence_file_count as number) || 0), 0);
+
+  res.json({
+    summary: {
+      totalControls: TOTAL,
+      implemented,
+      partiallyImplemented: partial,
+      governed,
+      inherited,
+      notApplicable,
+      applicable,
+      adjudicatedPercent: applicable > 0 ? Math.round(((implemented + governed + inherited) / applicable) * 100 * 100) / 100 : 0,
+      totalEvidenceFiles
+    },
+    buckets: [
+      { name: 'Enclave Configuration', total: implemented + partial, implemented: implemented },
+      { name: 'Governance', total: governed, implemented: governed },
+      { name: 'Inherited', total: inherited, implemented: inherited },
+      { name: 'N/A', total: notApplicable, implemented: notApplicable }
+    ],
+    domains: Object.values(domainMap).sort((a: any, b: any) => a.name.localeCompare(b.name)),
+    bundleInfo: latestIngest ? {
+      bundleVersion: latestIngest.bundle_version,
+      trustCodexVersion: latestIngest.trust_codex_version,
+      bundleHash: latestIngest.bundle_hash,
+      ingestedAt: latestIngest.ingest_timestamp
+    } : null
+  });
+});
+
 router.get('/cmmc/controls', async (req, res) => {
   const { domain, level } = req.query;
   let sql = 'SELECT * FROM cmmc_controls WHERE 1=1';

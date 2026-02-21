@@ -35,8 +35,15 @@ function controlIdToDomain(controlId: string): string {
 
 function normalizeStatus(s: string): string {
   const lower = (s || '').toLowerCase();
+  // Handle all five status types from the evidence bundle
+  if (lower === 'implemented') return 'implemented';
+  if (lower === 'partially_implemented' || lower === 'partial') return 'partially_implemented';
+  if (lower === 'governed') return 'governed';
+  if (lower === 'inherited') return 'inherited';
+  if (lower === 'not_applicable' || lower === 'not applicable' || lower === 'n/a') return 'not_applicable';
+  // Fallback for legacy formats
   if (lower.includes('implement') && !lower.includes('partial')) return 'implemented';
-  if (lower.includes('partial') || lower === 'partial') return 'partial';
+  if (lower.includes('partial')) return 'partially_implemented';
   return 'not_implemented';
 }
 
@@ -194,7 +201,8 @@ function evidenceToAdjudicated(evidence: ManifestEvidence[], ingestId: number): 
   for (const ev of evidence) {
     const existing = byControl.get(ev.controlId);
     const norm = normalizeStatus(ev.status);
-    if (!existing || norm === 'implemented') {
+    // Prefer implemented over partial, but keep existing if it's already implemented
+    if (!existing || (norm === 'implemented' && existing.status !== 'implemented')) {
       byControl.set(ev.controlId, { status: norm, class: null });
     }
   }
@@ -254,20 +262,49 @@ export async function processEvidenceBundle(fileBuffer: Buffer, userId: string):
         control_id: c.control_id,
         domain: controlIdToDomain(c.control_id),
         status: normalizeStatus(c.status),
-        class: c.class ?? null
-      })) ?? evidenceToAdjudicated(evidence, ingestId);
+        class: c.class ?? null,
+        evidence_count: (c.evidence ?? []).length
+      })) ?? evidenceToAdjudicated(evidence, ingestId).map((adj) => ({ ...adj, evidence_count: 0 }));
 
     await client.query('BEGIN');
+    // Clear old data
+    await client.query('DELETE FROM cmmc_control_evidence_files');
     await client.query('DELETE FROM cmmc_adjudicated_controls');
     await client.query('DELETE FROM cmmc_control_evidence');
+    
+    // Insert adjudicated controls with evidence file counts
     for (const adj of adjudicated) {
       await client.query(
-        `INSERT INTO cmmc_adjudicated_controls (control_id, domain, status, class, last_seen_ingest_id)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (control_id) DO UPDATE SET domain = EXCLUDED.domain, status = EXCLUDED.status, class = EXCLUDED.class, last_seen_ingest_id = EXCLUDED.last_seen_ingest_id`,
-        [adj.control_id, adj.domain, adj.status, adj.class, ingestId]
+        `INSERT INTO cmmc_adjudicated_controls (control_id, domain, status, class, evidence_file_count, last_seen_ingest_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (control_id) DO UPDATE SET 
+           domain = EXCLUDED.domain, 
+           status = EXCLUDED.status, 
+           class = EXCLUDED.class, 
+           evidence_file_count = EXCLUDED.evidence_file_count,
+           last_seen_ingest_id = EXCLUDED.last_seen_ingest_id,
+           updated_at = NOW()`,
+        [adj.control_id, adj.domain, adj.status, adj.class, adj.evidence_count, ingestId]
       );
     }
+    
+    // Insert evidence files from controls array
+    if (parsed.controls) {
+      for (const c of parsed.controls) {
+        const evList = (c.evidence ?? []) as { filename?: string; sha256?: string }[];
+        for (const ev of evList) {
+          if (ev.filename) {
+            await client.query(
+              `INSERT INTO cmmc_control_evidence_files (control_id, filename, sha256, last_seen_ingest_id)
+               VALUES ($1, $2, $3, $4)`,
+              [c.control_id, ev.filename, ev.sha256 ?? null, ingestId]
+            );
+          }
+        }
+      }
+    }
+    
+    // Also insert into legacy cmmc_control_evidence table for backward compatibility
     for (const ev of evidence) {
       await client.query(
         `INSERT INTO cmmc_control_evidence (control_id, status, evidence_filename, evidence_sha256, last_seen_ingest_id)
