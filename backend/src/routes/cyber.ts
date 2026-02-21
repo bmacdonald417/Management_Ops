@@ -181,7 +181,7 @@ router.get('/cmmc-dashboard', async (req, res) => {
       adjudicated, // All adjudicated controls (includes N/A)
       outstanding, // Outstanding = only partially implemented (in progress)
       adjudicatedPercent: TOTAL > 0 ? Math.round((adjudicated / TOTAL) * 100 * 100) / 100 : 0,
-      totalEvidenceFiles
+      totalEvidenceReferences: totalEvidenceFiles // Total control × file pairs (not unique files)
     },
     buckets: [
       { name: 'Enclave Configuration', total: implemented + partial, implemented: implemented },
@@ -197,6 +197,27 @@ router.get('/cmmc-dashboard', async (req, res) => {
       ingestedAt: latestIngest.ingest_timestamp
     } : null
   });
+});
+
+// Get controls for a specific domain with evidence files
+router.get('/cmmc-dashboard/domain/:domain', async (req, res) => {
+  const { domain } = req.params;
+  
+  const controls = await query(
+    `SELECT ac.*, 
+       COALESCE(
+         (SELECT json_agg(json_build_object('filename', filename, 'sha256', sha256))
+          FROM cmmc_control_evidence_files
+          WHERE control_id = ac.control_id),
+         '[]'::json
+       ) as evidence_files
+     FROM cmmc_adjudicated_controls ac
+     WHERE ac.domain = $1
+     ORDER BY ac.control_id`,
+    [domain]
+  );
+  
+  res.json({ controls: controls.rows });
 });
 
 router.get('/cmmc/controls', async (req, res) => {

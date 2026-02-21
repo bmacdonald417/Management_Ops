@@ -12,6 +12,18 @@ interface DomainData {
   evidenceFiles: number;
 }
 
+interface ControlWithEvidence {
+  control_id: string;
+  domain: string;
+  status: string;
+  class: string | null;
+  evidence_file_count: number;
+  evidence_files: Array<{
+    filename: string;
+    sha256: string | null;
+  }>;
+}
+
 interface DashboardData {
   summary: {
     totalControls: number;
@@ -24,7 +36,7 @@ interface DashboardData {
     adjudicated: number;
     outstanding: number;
     adjudicatedPercent: number;
-    totalEvidenceFiles: number;
+    totalEvidenceReferences: number;
   };
   buckets: Array<{
     name: string;
@@ -70,6 +82,9 @@ export default function CMMCDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDomain, setSelectedDomain] = useState<DomainData | null>(null);
+  const [domainControls, setDomainControls] = useState<ControlWithEvidence[]>([]);
+  const [loadingControls, setLoadingControls] = useState(false);
+  const [selectedEvidenceFile, setSelectedEvidenceFile] = useState<{ filename: string; sha256: string | null } | null>(null);
 
   useEffect(() => {
     client
@@ -78,6 +93,19 @@ export default function CMMCDashboard() {
       .catch(() => setError('Failed to load dashboard'))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (selectedDomain) {
+      setLoadingControls(true);
+      client
+        .get<{ controls: ControlWithEvidence[] }>(`/cyber/cmmc-dashboard/domain/${encodeURIComponent(selectedDomain.name)}`)
+        .then((r) => setDomainControls(r.data.controls))
+        .catch(() => setDomainControls([]))
+        .finally(() => setLoadingControls(false));
+    } else {
+      setDomainControls([]);
+    }
+  }, [selectedDomain]);
 
   if (loading) {
     return (
@@ -193,7 +221,10 @@ export default function CMMCDashboard() {
 
           <div className="mb-4">
             <p className="text-gray-400 text-sm mb-2">
-              {summary.totalEvidenceFiles.toLocaleString()} evidence files · SHA-256 verified
+              {summary.totalEvidenceReferences.toLocaleString()} evidence references · SHA-256 verified
+            </p>
+            <p className="text-gray-500 text-xs italic">
+              (Control × file pairs; same file may be referenced by multiple controls)
             </p>
           </div>
 
@@ -307,7 +338,7 @@ export default function CMMCDashboard() {
                   </div>
 
                   <div className="text-gray-400 text-xs">
-                    {domain.total} total controls · {domain.evidenceFiles} evidence files
+                    {domain.total} total controls · {domain.evidenceFiles} evidence references
                   </div>
                 </div>
               );
@@ -347,60 +378,216 @@ export default function CMMCDashboard() {
           <>
             <div
               className="fixed inset-0 bg-black/50 z-40"
-              onClick={() => setSelectedDomain(null)}
+              onClick={() => {
+                setSelectedDomain(null);
+                setSelectedEvidenceFile(null);
+              }}
             ></div>
-            <div className="fixed right-0 top-0 h-full w-full max-w-md bg-gray-800 border-l border-gray-700 shadow-2xl z-50 overflow-y-auto">
+            <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-gray-800 border-l border-gray-700 shadow-2xl z-50 overflow-y-auto">
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-bold">{selectedDomain.name}</h2>
+                  <div>
+                    <h2 className="text-xl font-bold">{selectedDomain.name}</h2>
+                    <p className="text-gray-400 text-sm mt-1">
+                      NIST SP 800-171 {NIST_SECTION_MAP[selectedDomain.name] || ''}
+                    </p>
+                  </div>
                   <button
-                    onClick={() => setSelectedDomain(null)}
-                    className="text-gray-400 hover:text-white"
+                    onClick={() => {
+                      setSelectedDomain(null);
+                      setSelectedEvidenceFile(null);
+                    }}
+                    className="text-gray-400 hover:text-white text-2xl"
                   >
                     ✕
                   </button>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-gray-400 text-sm mb-2">Control Summary</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-gray-700/50 rounded p-2">
-                        <p className="text-xs text-gray-400">Total</p>
-                        <p className="text-lg font-bold">{selectedDomain.total}</p>
-                      </div>
-                      <div className="bg-gray-700/50 rounded p-2">
-                        <p className="text-xs text-gray-400">Evidence Files</p>
-                        <p className="text-lg font-bold">{selectedDomain.evidenceFiles}</p>
-                      </div>
-                    </div>
+
+                {/* Domain Summary */}
+                <div className="mb-6 grid grid-cols-2 gap-3">
+                  <div className="bg-gray-700/50 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 mb-1">Total Controls</p>
+                    <p className="text-2xl font-bold">{selectedDomain.total}</p>
                   </div>
-                  <div>
-                    <p className="text-gray-400 text-sm mb-2">Status Breakdown</p>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between bg-green-500/10 rounded p-2">
-                        <span className="text-green-400">✅ Implemented</span>
-                        <span className="font-bold">{selectedDomain.implemented}</span>
+                  <div className="bg-gray-700/50 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 mb-1">Evidence References</p>
+                    <p className="text-2xl font-bold">{selectedDomain.evidenceFiles}</p>
+                    <p className="text-xs text-gray-500 mt-1">(Control × file pairs)</p>
+                  </div>
+                </div>
+
+                {/* Status Breakdown */}
+                <div className="mb-6">
+                  <p className="text-gray-400 text-sm mb-3 font-semibold">Status Breakdown</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex items-center justify-between bg-green-500/10 rounded p-2">
+                      <span className="text-green-400 text-sm">✅ Implemented</span>
+                      <span className="font-bold">{selectedDomain.implemented}</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-blue-500/10 rounded p-2">
+                      <span className="text-blue-400 text-sm">🏛️ Governed</span>
+                      <span className="font-bold">{selectedDomain.governed}</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-purple-500/10 rounded p-2">
+                      <span className="text-purple-400 text-sm">🤝 Inherited</span>
+                      <span className="font-bold">{selectedDomain.inherited}</span>
+                    </div>
+                    {selectedDomain.partially_implemented > 0 && (
+                      <div className="flex items-center justify-between bg-amber-500/10 rounded p-2">
+                        <span className="text-amber-400 text-sm">⚠️ In Progress</span>
+                        <span className="font-bold">{selectedDomain.partially_implemented}</span>
                       </div>
-                      <div className="flex items-center justify-between bg-blue-500/10 rounded p-2">
-                        <span className="text-blue-400">🏛️ Governed</span>
-                        <span className="font-bold">{selectedDomain.governed}</span>
+                    )}
+                    {selectedDomain.not_applicable > 0 && (
+                      <div className="flex items-center justify-between bg-gray-500/10 rounded p-2">
+                        <span className="text-gray-400 text-sm">🚫 Not Applicable</span>
+                        <span className="font-bold">{selectedDomain.not_applicable}</span>
                       </div>
-                      <div className="flex items-center justify-between bg-purple-500/10 rounded p-2">
-                        <span className="text-purple-400">🤝 Inherited</span>
-                        <span className="font-bold">{selectedDomain.inherited}</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Controls List */}
+                <div>
+                  <p className="text-gray-400 text-sm mb-3 font-semibold">Controls ({domainControls.length})</p>
+                  {loadingControls ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-400 mx-auto mb-2"></div>
+                      <p className="text-gray-400 text-sm">Loading controls...</p>
+                    </div>
+                  ) : domainControls.length === 0 ? (
+                    <p className="text-gray-500 text-sm text-center py-8">No controls found</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {domainControls.map((control) => {
+                        const getStatusColor = (status: string) => {
+                          switch (status) {
+                            case 'implemented':
+                              return 'bg-green-500/20 text-green-400 border-green-500/30';
+                            case 'governed':
+                              return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+                            case 'inherited':
+                              return 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+                            case 'partially_implemented':
+                              return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+                            case 'not_applicable':
+                              return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+                            default:
+                              return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
+                          }
+                        };
+
+                        const getStatusLabel = (status: string) => {
+                          switch (status) {
+                            case 'implemented':
+                              return '✅ Implemented';
+                            case 'governed':
+                              return '🏛️ Governed';
+                            case 'inherited':
+                              return '🤝 Inherited';
+                            case 'partially_implemented':
+                              return '⚠️ In Progress';
+                            case 'not_applicable':
+                              return '🚫 N/A';
+                            default:
+                              return status;
+                          }
+                        };
+
+                        const evidenceFiles = Array.isArray(control.evidence_files) ? control.evidence_files : [];
+
+                        return (
+                          <div
+                            key={control.control_id}
+                            className="bg-gray-700/30 border border-gray-600 rounded-lg p-4 hover:bg-gray-700/50 transition"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-white text-sm mb-1">{control.control_id}</h4>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`px-2 py-0.5 rounded text-xs border ${getStatusColor(control.status)}`}>
+                                    {getStatusLabel(control.status)}
+                                  </span>
+                                  {control.class && (
+                                    <span className="px-2 py-0.5 rounded text-xs bg-gray-600/50 text-gray-300 border border-gray-500/30">
+                                      Class {control.class}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-3">
+                              <p className="text-xs text-gray-400 mb-2">
+                                Evidence References: {evidenceFiles.length}
+                              </p>
+                              {evidenceFiles.length > 0 ? (
+                                <div className="space-y-1">
+                                  {evidenceFiles.slice(0, 3).map((ev: { filename: string; sha256: string | null }, idx: number) => (
+                                    <button
+                                      key={idx}
+                                      onClick={() => setSelectedEvidenceFile(ev)}
+                                      className="w-full text-left px-2 py-1.5 bg-gray-600/30 hover:bg-gray-600/50 rounded text-xs text-gray-300 hover:text-white transition flex items-center justify-between group"
+                                    >
+                                      <span className="truncate flex-1">{ev.filename}</span>
+                                      <span className="ml-2 text-gray-500 group-hover:text-gray-400">→</span>
+                                    </button>
+                                  ))}
+                                  {evidenceFiles.length > 3 && (
+                                    <p className="text-xs text-gray-500 px-2">
+                                      +{evidenceFiles.length - 3} more
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-xs text-gray-500 px-2">No evidence files</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Evidence File Detail Modal */}
+        {selectedEvidenceFile && (
+          <>
+            <div
+              className="fixed inset-0 bg-black/70 z-50"
+              onClick={() => setSelectedEvidenceFile(null)}
+            ></div>
+            <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+              <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">Evidence File</h3>
+                    <button
+                      onClick={() => setSelectedEvidenceFile(null)}
+                      className="text-gray-400 hover:text-white text-2xl"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-gray-400 mb-1">Filename</p>
+                      <p className="text-white font-mono text-sm break-all">{selectedEvidenceFile.filename}</p>
+                    </div>
+                    {selectedEvidenceFile.sha256 && (
+                      <div>
+                        <p className="text-sm text-gray-400 mb-1">SHA-256 Hash</p>
+                        <p className="text-white font-mono text-xs break-all">{selectedEvidenceFile.sha256}</p>
                       </div>
-                      {selectedDomain.partially_implemented > 0 && (
-                        <div className="flex items-center justify-between bg-amber-500/10 rounded p-2">
-                          <span className="text-amber-400">⚠️ Partially Implemented</span>
-                          <span className="font-bold">{selectedDomain.partially_implemented}</span>
-                        </div>
-                      )}
-                      {selectedDomain.not_applicable > 0 && (
-                        <div className="flex items-center justify-between bg-gray-500/10 rounded p-2">
-                          <span className="text-gray-400">🚫 Not Applicable</span>
-                          <span className="font-bold">{selectedDomain.not_applicable}</span>
-                        </div>
-                      )}
+                    )}
+                    <div className="pt-4 border-t border-gray-700">
+                      <p className="text-sm text-gray-400">
+                        This evidence file is stored in the evidence bundle ZIP. To view the contents,
+                        extract the bundle and navigate to the <code className="bg-gray-700/50 px-1 rounded">evidence/</code> directory.
+                      </p>
                     </div>
                   </div>
                 </div>
