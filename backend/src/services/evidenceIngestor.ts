@@ -1,11 +1,44 @@
 /**
  * CMMC Evidence Ingestor: process Trust Codex evidence-bundle.zip
- * Supports: (1) manifest.json (evidence bundle), (2) qms-manifest.json (Trust Codex QMS export)
- * Verifies manifest hash and evidence file hashes; updates cmmc_control_evidence.
+ * Supports: (1) manifest.json with controls array, (2) manifest.json with evidence array, (3) qms-manifest.json
+ * Verifies manifest hash and evidence file hashes; updates cmmc_control_evidence and cmmc_adjudicated_controls.
  */
 import { createHash } from 'crypto';
 import AdmZip from 'adm-zip';
 import { pool } from '../db/connection.js';
+
+/** CMMC control ID prefix -> domain name */
+const CMMC_DOMAIN_MAP: Record<string, string> = {
+  AC: 'Access Control',
+  AM: 'Asset Management',
+  AT: 'Awareness and Training',
+  AU: 'Audit and Accountability',
+  CA: 'Security Assessment',
+  CM: 'Configuration Management',
+  IA: 'Identification and Authentication',
+  IR: 'Incident Response',
+  MA: 'Maintenance',
+  MP: 'Media Protection',
+  PE: 'Physical Protection',
+  PS: 'Personnel Security',
+  RA: 'Risk Assessment',
+  RM: 'Risk Management',
+  SA: 'Situational Awareness',
+  SC: 'System and Communications Protection',
+  SI: 'System and Information Integrity'
+};
+
+function controlIdToDomain(controlId: string): string {
+  const prefix = controlId.split(/[.\-]/)[0]?.toUpperCase() ?? '';
+  return CMMC_DOMAIN_MAP[prefix] ?? 'Other';
+}
+
+function normalizeStatus(s: string): string {
+  const lower = (s || '').toLowerCase();
+  if (lower.includes('implement') && !lower.includes('partial')) return 'implemented';
+  if (lower.includes('partial') || lower === 'partial') return 'partial';
+  return 'not_implemented';
+}
 
 export interface ManifestEvidence {
   controlId: string;
@@ -18,7 +51,16 @@ export interface Manifest {
   bundleHash: string;
   bundleVersion?: string;
   trustCodexVersion?: string;
-  evidence: ManifestEvidence[];
+  evidence?: ManifestEvidence[];
+  controls?: ManifestControl[];
+}
+
+/** manifest.json controls array format (dashboard/adjudication) */
+export interface ManifestControl {
+  control_id: string;
+  status: string;
+  class?: string;
+  evidence?: unknown[];
 }
 
 /** Trust Codex QMS export manifest format */
@@ -49,24 +91,56 @@ function sha256Hex(data: Buffer | string): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
-function parseManifest(zip: AdmZip): {
+type ParsedManifest = {
   evidence: ManifestEvidence[];
+  controls?: ManifestControl[];
   bundleHash: string;
   bundleVersion: string | null;
   trustCodexVersion: string | null;
-} {
+};
+
+function parseManifest(zip: AdmZip): ParsedManifest {
   const manifestEntry = zip.getEntry('manifest.json');
   if (manifestEntry && !manifestEntry.isDirectory) {
     const manifestRaw = manifestEntry.getData().toString('utf8');
     const manifest = JSON.parse(manifestRaw) as Manifest;
-    if (manifest.bundleHash && Array.isArray(manifest.evidence)) {
-      const manifestWithoutHash = { ...manifest };
-      delete (manifestWithoutHash as Record<string, unknown>).bundleHash;
-      const canonical = canonicalStringify(manifestWithoutHash);
-      const computed = sha256Hex(canonical);
-      if (computed.toLowerCase() !== (manifest.bundleHash || '').toLowerCase()) {
-        throw new Error('Manifest hash mismatch');
+    if (!manifest.bundleHash) throw new Error('manifest.json requires bundleHash');
+
+    const manifestWithoutHash = { ...manifest };
+    delete (manifestWithoutHash as Record<string, unknown>).bundleHash;
+    const canonical = canonicalStringify(manifestWithoutHash);
+    const computed = sha256Hex(canonical);
+    if (computed.toLowerCase() !== (manifest.bundleHash || '').toLowerCase()) {
+      throw new Error('Manifest hash mismatch');
+    }
+
+    // Format 1: controls array (dashboard/adjudication)
+    if (Array.isArray(manifest.controls) && manifest.controls.length > 0) {
+      const evidence: ManifestEvidence[] = [];
+      for (const c of manifest.controls) {
+        const evList = (c.evidence ?? []) as { filename?: string; sha256?: string }[];
+        for (const ev of evList) {
+          if (ev.filename && ev.sha256) {
+            evidence.push({
+              controlId: c.control_id,
+              status: c.status,
+              filename: ev.filename,
+              sha256: ev.sha256
+            });
+          }
+        }
       }
+      return {
+        evidence,
+        controls: manifest.controls,
+        bundleHash: manifest.bundleHash,
+        bundleVersion: manifest.bundleVersion ?? null,
+        trustCodexVersion: manifest.trustCodexVersion ?? null
+      };
+    }
+
+    // Format 2: evidence array (legacy)
+    if (Array.isArray(manifest.evidence)) {
       return {
         evidence: manifest.evidence,
         bundleHash: manifest.bundleHash,
@@ -115,6 +189,23 @@ function parseManifest(zip: AdmZip): {
   throw new Error('manifest.json or qms-manifest.json not found in bundle');
 }
 
+function evidenceToAdjudicated(evidence: ManifestEvidence[], ingestId: number): { control_id: string; domain: string; status: string; class: string | null }[] {
+  const byControl = new Map<string, { status: string; class: string | null }>();
+  for (const ev of evidence) {
+    const existing = byControl.get(ev.controlId);
+    const norm = normalizeStatus(ev.status);
+    if (!existing || norm === 'implemented') {
+      byControl.set(ev.controlId, { status: norm, class: null });
+    }
+  }
+  return Array.from(byControl.entries()).map(([control_id, { status }]) => ({
+    control_id,
+    domain: controlIdToDomain(control_id),
+    status,
+    class: null as string | null
+  }));
+}
+
 export async function processEvidenceBundle(fileBuffer: Buffer, userId: string): Promise<{ ingestId: number }> {
   const client = await pool.connect();
   let ingestId: number;
@@ -127,7 +218,7 @@ export async function processEvidenceBundle(fileBuffer: Buffer, userId: string):
     ingestId = logRes.rows[0].id as number;
 
     const zip = new AdmZip(fileBuffer);
-    let parsed: { evidence: ManifestEvidence[]; bundleHash: string; bundleVersion: string | null; trustCodexVersion: string | null };
+    let parsed: ParsedManifest;
     try {
       parsed = parseManifest(zip);
     } catch (err) {
@@ -158,8 +249,25 @@ export async function processEvidenceBundle(fileBuffer: Buffer, userId: string):
       }
     }
 
+    const adjudicated =
+      parsed.controls?.map((c) => ({
+        control_id: c.control_id,
+        domain: controlIdToDomain(c.control_id),
+        status: normalizeStatus(c.status),
+        class: c.class ?? null
+      })) ?? evidenceToAdjudicated(evidence, ingestId);
+
     await client.query('BEGIN');
+    await client.query('DELETE FROM cmmc_adjudicated_controls');
     await client.query('DELETE FROM cmmc_control_evidence');
+    for (const adj of adjudicated) {
+      await client.query(
+        `INSERT INTO cmmc_adjudicated_controls (control_id, domain, status, class, last_seen_ingest_id)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (control_id) DO UPDATE SET domain = EXCLUDED.domain, status = EXCLUDED.status, class = EXCLUDED.class, last_seen_ingest_id = EXCLUDED.last_seen_ingest_id`,
+        [adj.control_id, adj.domain, adj.status, adj.class, ingestId]
+      );
+    }
     for (const ev of evidence) {
       await client.query(
         `INSERT INTO cmmc_control_evidence (control_id, status, evidence_filename, evidence_sha256, last_seen_ingest_id)

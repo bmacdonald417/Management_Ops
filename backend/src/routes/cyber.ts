@@ -42,6 +42,80 @@ router.post(
   }
 );
 
+/** CMMC Level 2: expected control counts per domain (NIST 800-171) */
+const CMMC_L2_DOMAIN_TOTALS: Record<string, number> = {
+  'Access Control': 22,
+  'Awareness and Training': 3,
+  'Audit and Accountability': 9,
+  'Configuration Management': 9,
+  'Identification and Authentication': 11,
+  'Incident Response': 3,
+  'Maintenance': 6,
+  'Media Protection': 9,
+  'Personnel Security': 2,
+  'Physical Protection': 6,
+  'Risk Assessment': 3,
+  'Security Assessment': 4,
+  'Situational Awareness': 0,
+  'System and Communications Protection': 16,
+  'System and Information Integrity': 7,
+  Other: 0
+};
+
+const CMMC_L2_TOTAL = 110;
+
+router.get('/dashboard-summary', async (_req, res) => {
+  const adjudicated = await query(
+    `SELECT control_id, domain, status FROM cmmc_adjudicated_controls`
+  );
+  const rows = adjudicated.rows as { control_id: string; domain: string; status: string }[];
+  const adjudicatedCount = rows.length;
+  const outstandingCount = Math.max(0, CMMC_L2_TOTAL - adjudicatedCount);
+  const adjudicatedPercent = CMMC_L2_TOTAL > 0 ? Math.round((adjudicatedCount / CMMC_L2_TOTAL) * 10000) / 100 : 0;
+
+  const byDomain = new Map<
+    string,
+    { total: number; adjudicated: number; implemented: number; partial: number; not_implemented: number }
+  >();
+  for (const [name, total] of Object.entries(CMMC_L2_DOMAIN_TOTALS)) {
+    if (total > 0) byDomain.set(name, { total, adjudicated: 0, implemented: 0, partial: 0, not_implemented: 0 });
+  }
+  for (const r of rows) {
+    const d = byDomain.get(r.domain);
+    if (d) {
+      d.adjudicated += 1;
+      const s = (r.status || '').toLowerCase();
+      if (s.includes('implement') && !s.includes('partial')) d.implemented += 1;
+      else if (s.includes('partial') || s === 'partial') d.partial += 1;
+      else d.not_implemented += 1;
+    } else {
+      const s = (r.status || '').toLowerCase();
+      const impl = s.includes('implement') && !s.includes('partial') ? 1 : 0;
+      const part = s.includes('partial') ? 1 : 0;
+      byDomain.set(r.domain, {
+        total: CMMC_L2_DOMAIN_TOTALS[r.domain] ?? 0,
+        adjudicated: 1,
+        implemented: impl,
+        partial: part,
+        not_implemented: impl === 0 && part === 0 ? 1 : 0
+      });
+    }
+  }
+
+  const domains = Array.from(byDomain.entries())
+    .filter(([, d]) => d.total > 0 || d.adjudicated > 0)
+    .map(([name, d]) => ({ name, ...d }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  res.json({
+    totalControls: CMMC_L2_TOTAL,
+    adjudicatedCount,
+    outstandingCount,
+    adjudicatedPercent,
+    domains
+  });
+});
+
 router.get('/cmmc/controls', async (req, res) => {
   const { domain, level } = req.query;
   let sql = 'SELECT * FROM cmmc_controls WHERE 1=1';

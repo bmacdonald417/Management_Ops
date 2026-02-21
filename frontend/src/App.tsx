@@ -34,6 +34,7 @@ import AdminComplianceRegistry from './pages/AdminComplianceRegistry';
 import AdminRegulatoryLibrary from './pages/AdminRegulatoryLibrary';
 import AdminAISettings from './pages/AdminAISettings';
 import AdminCMMCEvidence from './pages/AdminCMMCEvidence';
+import CMMCDashboard from './pages/CMMCDashboard';
 import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 
@@ -100,6 +101,7 @@ function AppRoutes() {
         <Route path="admin/cmmc-evidence" element={<RequireAdmin><AdminCMMCEvidence /></RequireAdmin>} />
         <Route path="financials" element={<Financials />} />
         <Route path="cyber" element={<Cyber />} />
+        <Route path="cmmc-dashboard" element={<CMMCDashboard />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

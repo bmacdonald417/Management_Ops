@@ -9,7 +9,8 @@ const mainNavItems = [
   { path: '/contracts', label: 'Contracts' },
   { path: '/compliance', label: 'Compliance' },
   { path: '/financials', label: 'Financials' },
-  { path: '/cyber', label: 'Cyber' }
+  { path: '/cyber', label: 'Cyber' },
+  { path: '/cmmc-dashboard', label: 'CMMC Dashboard' }
 ];
 
 const adminNavItems = [
