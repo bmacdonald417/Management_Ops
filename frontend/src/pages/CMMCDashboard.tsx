@@ -21,7 +21,7 @@ interface DashboardData {
     inherited: number;
     notApplicable: number;
     applicable: number;
-    fullyAdjudicated: number;
+    adjudicated: number;
     outstanding: number;
     adjudicatedPercent: number;
     totalEvidenceFiles: number;
@@ -177,7 +177,7 @@ export default function CMMCDashboard() {
           <div className="mb-4">
             <div className="flex items-baseline gap-4 mb-2">
               <span className="text-4xl font-bold">
-                Adjudicated: {summary.fullyAdjudicated}/{summary.totalControls} ({summary.adjudicatedPercent}%)
+                Adjudicated: {summary.adjudicated}/{summary.totalControls} ({summary.adjudicatedPercent}%)
               </span>
               <span className="text-gray-400">
                 Outstanding: {summary.outstanding || summary.partiallyImplemented}
