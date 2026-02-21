@@ -89,31 +89,13 @@ interface QmsManifest {
 }
 
 /**
- * Canonical JSON stringify with sorted keys (recursive)
- * This matches Trust Codex's hash computation method
- * Sorts all object keys recursively while preserving array order
+ * Canonical JSON stringify matching Trust Codex's exact method
+ * Trust Codex uses JSON.stringify(copy) directly - no key sorting, just compact JSON
+ * This preserves the original key order from the manifest object
  */
 function canonicalStringify(obj: unknown): string {
-  if (obj === null || obj === undefined) {
-    return 'null';
-  }
-  if (typeof obj === 'string') {
-    return JSON.stringify(obj);
-  }
-  if (typeof obj === 'number' || typeof obj === 'boolean') {
-    return String(obj);
-  }
-  if (Array.isArray(obj)) {
-    return '[' + obj.map((item) => canonicalStringify(item)).join(',') + ']';
-  }
-  if (typeof obj === 'object') {
-    const keys = Object.keys(obj as Record<string, unknown>).sort();
-    const pairs = keys.map((key) => {
-      const value = (obj as Record<string, unknown>)[key];
-      return JSON.stringify(key) + ':' + canonicalStringify(value);
-    });
-    return '{' + pairs.join(',') + '}';
-  }
+  // Trust Codex uses JSON.stringify directly without any key sorting
+  // This preserves the key order as it appears in the original object
   return JSON.stringify(obj);
 }
 
