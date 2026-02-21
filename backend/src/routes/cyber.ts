@@ -3,7 +3,7 @@ import multer from 'multer';
 import { query } from '../db/connection.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { auditLog } from '../middleware/audit.js';
-import { processEvidenceBundle } from '../services/evidenceIngestor.js';
+import { processEvidenceBundle, getEvidenceFileContent } from '../services/evidenceIngestor.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -272,6 +272,28 @@ router.get('/cmmc-dashboard/evidence', async (req, res) => {
   }));
 
   res.json({ references, uniqueFiles });
+});
+
+// Serve evidence file content from the last ingested bundle (for viewing in the dashboard)
+router.get('/cmmc-dashboard/evidence/file-content', async (req, res) => {
+  const filename = typeof req.query.filename === 'string' ? req.query.filename.trim() : '';
+  if (!filename || filename.includes('..') || filename.startsWith('/')) {
+    return res.status(400).json({ error: 'Invalid or missing filename' });
+  }
+  const allowed = await query(
+    'SELECT 1 FROM cmmc_control_evidence_files WHERE filename = $1 LIMIT 1',
+    [filename]
+  );
+  if (allowed.rows.length === 0) {
+    return res.status(404).json({ error: 'Evidence file not found' });
+  }
+  try {
+    const { content, encoding } = getEvidenceFileContent(filename);
+    res.json({ content, encoding });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to read evidence file';
+    return res.status(404).json({ error: message });
+  }
 });
 
 router.get('/cmmc/controls', async (req, res) => {

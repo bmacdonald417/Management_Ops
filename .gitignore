@@ -29,5 +29,8 @@ Thumbs.db
 coverage/
 .nyc_output/
 
+# CMMC evidence bundle persisted for serving file contents (regenerated on ingest)
+backend/data/
+
 # Misc
 *.tgz

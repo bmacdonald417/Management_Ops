@@ -2,10 +2,28 @@
  * CMMC Evidence Ingestor: process Trust Codex evidence-bundle.zip
  * Supports: (1) manifest.json with controls array, (2) manifest.json with evidence array, (3) qms-manifest.json
  * Verifies manifest hash and evidence file hashes; updates cmmc_control_evidence and cmmc_adjudicated_controls.
+ * On success, writes the bundle to disk so the API can serve evidence file contents.
  */
 import { createHash } from 'crypto';
+import { mkdirSync, existsSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import AdmZip from 'adm-zip';
 import { pool } from '../db/connection.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/** Directory and path for the latest successfully ingested evidence bundle (so we can serve file contents). */
+export function getEvidenceBundlePath(): string {
+  const dataDir = join(__dirname, '..', '..', 'data');
+  return join(dataDir, 'cmmc-evidence-bundle-latest.zip');
+}
+
+function ensureDataDir(): void {
+  const path = getEvidenceBundlePath();
+  const dir = dirname(path);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+}
 
 /** CMMC control ID prefix -> domain name */
 const CMMC_DOMAIN_MAP: Record<string, string> = {
@@ -348,6 +366,15 @@ export async function processEvidenceBundle(fileBuffer: Buffer, userId: string):
     );
     await client.query('COMMIT');
 
+    // Persist bundle to disk so the API can serve evidence file contents
+    try {
+      ensureDataDir();
+      const { writeFileSync } = await import('fs');
+      writeFileSync(getEvidenceBundlePath(), fileBuffer);
+    } catch (writeErr) {
+      console.warn('[Ingest] Could not persist evidence bundle to disk:', writeErr);
+    }
+
     return { ingestId };
   } catch (err) {
     try {
@@ -359,4 +386,29 @@ export async function processEvidenceBundle(fileBuffer: Buffer, userId: string):
   } finally {
     client.release();
   }
+}
+
+/** Read evidence file content from the last ingested bundle. Returns UTF-8 text or base64 for binary. */
+export function getEvidenceFileContent(filename: string): { content: string; encoding: 'utf8' | 'base64' } {
+  const bundlePath = getEvidenceBundlePath();
+  if (!existsSync(bundlePath)) {
+    throw new Error('No evidence bundle on disk. Ingest a bundle first.');
+  }
+  const zip = new AdmZip(bundlePath);
+  let entry = zip.getEntry(filename);
+  if (!entry || entry.isDirectory) {
+    entry = zip.getEntry(`evidence/${filename}`);
+  }
+  if (!entry || entry.isDirectory) {
+    throw new Error(`Evidence file not found: ${filename}`);
+  }
+  const data = entry.getData();
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const utf8 = buf.toString('utf8');
+  const hasReplacementChar = utf8.includes('\uFFFD');
+  const isLikelyText = !hasReplacementChar && buf.length < 2_000_000;
+  if (isLikelyText) {
+    return { content: utf8, encoding: 'utf8' };
+  }
+  return { content: buf.toString('base64'), encoding: 'base64' };
 }

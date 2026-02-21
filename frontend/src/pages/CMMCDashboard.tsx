@@ -106,6 +106,9 @@ export default function CMMCDashboard() {
   const [loadingControls, setLoadingControls] = useState(false);
   const [selectedEvidenceFile, setSelectedEvidenceFile] = useState<{ filename: string; sha256: string | null } | null>(null);
   const [selectedEvidenceControlIds, setSelectedEvidenceControlIds] = useState<string[] | null>(null);
+  const [evidenceContent, setEvidenceContent] = useState<{ content: string; encoding: 'utf8' | 'base64' } | null>(null);
+  const [evidenceContentLoading, setEvidenceContentLoading] = useState(false);
+  const [evidenceContentError, setEvidenceContentError] = useState<string | null>(null);
 
   // Evidence Explorer: load when user requests it (click evidence count or open section)
   const [evidenceRequested, setEvidenceRequested] = useState(false);
@@ -148,6 +151,25 @@ export default function CMMCDashboard() {
       .catch(() => setEvidenceData(null))
       .finally(() => setEvidenceLoading(false));
   }, [evidenceRequested, data, evidenceFilters.domain, evidenceFilters.status, evidenceFilters.filename]);
+
+  // Fetch evidence file content when user opens the evidence file modal
+  useEffect(() => {
+    if (!selectedEvidenceFile) {
+      setEvidenceContent(null);
+      setEvidenceContentError(null);
+      setEvidenceContentLoading(false);
+      return;
+    }
+    setEvidenceContentLoading(true);
+    setEvidenceContentError(null);
+    setEvidenceContent(null);
+    const filename = encodeURIComponent(selectedEvidenceFile.filename);
+    client
+      .get<{ content: string; encoding: 'utf8' | 'base64' }>(`/cyber/cmmc-dashboard/evidence/file-content?filename=${filename}`)
+      .then((r) => setEvidenceContent(r.data))
+      .catch((err) => setEvidenceContentError(err.response?.data?.error ?? 'Failed to load file content'))
+      .finally(() => setEvidenceContentLoading(false));
+  }, [selectedEvidenceFile?.filename]);
 
   if (loading) {
     return (
@@ -795,8 +817,8 @@ export default function CMMCDashboard() {
               onClick={() => { setSelectedEvidenceFile(null); setSelectedEvidenceControlIds(null); }}
             ></div>
             <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-              <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                <div className="p-6">
+              <div className="bg-gray-800 border border-gray-700 rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+                <div className="p-6 flex-shrink-0 border-b border-gray-700">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold">Evidence File</h3>
                     <button
@@ -806,7 +828,7 @@ export default function CMMCDashboard() {
                       ✕
                     </button>
                   </div>
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div>
                       <p className="text-sm text-gray-400 mb-1">Filename</p>
                       <p className="text-white font-mono text-sm break-all">{selectedEvidenceFile.filename}</p>
@@ -832,14 +854,35 @@ export default function CMMCDashboard() {
                         </div>
                       </div>
                     )}
-                    <div className="pt-4 border-t border-gray-700">
-                      <p className="text-sm text-gray-400">
-                        This evidence file is stored in the evidence bundle ZIP. To view the contents,
-                        extract the bundle and navigate to the <code className="bg-gray-700/50 px-1 rounded">evidence/</code> directory
-                        (or <code className="bg-gray-700/50 px-1 rounded">evidence/azure/</code>, <code className="bg-gray-700/50 px-1 rounded">evidence/governance/</code> for subfolders).
-                      </p>
-                    </div>
                   </div>
+                </div>
+                <div className="flex-1 min-h-0 overflow-auto p-6 pt-4">
+                  <p className="text-sm text-gray-400 mb-2 font-semibold">Contents</p>
+                  {evidenceContentLoading && (
+                    <div className="flex items-center gap-2 text-gray-400">
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-teal-500 border-t-transparent" />
+                      Loading file...
+                    </div>
+                  )}
+                  {evidenceContentError && !evidenceContentLoading && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400 text-sm">
+                      {evidenceContentError}
+                    </div>
+                  )}
+                  {evidenceContent && !evidenceContentLoading && (
+                    <>
+                      {evidenceContent.encoding === 'utf8' ? (
+                        <pre className="bg-gray-900 border border-gray-700 rounded-lg p-4 text-sm text-gray-300 overflow-x-auto whitespace-pre-wrap font-mono max-h-[50vh] overflow-y-auto">
+                          {evidenceContent.content}
+                        </pre>
+                      ) : (
+                        <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 text-sm text-gray-400">
+                          <p>Binary file (base64). Size: {Math.round((evidenceContent.content.length * 3) / 4).toLocaleString()} bytes.</p>
+                          <p className="mt-2 text-gray-500 text-xs">Extract the evidence bundle to view or download this file.</p>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
